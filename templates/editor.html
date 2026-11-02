@@ -20,11 +20,11 @@
     <span class="stage-pill {{ project.stage }}">{{ project.stage_label }}</span>
   </div>
   <div class="editor-status" id="editorStatus"><i class="dot ok"></i><span>已连接 TopoTash</span></div>
-  <a class="btn btn-ghost btn-sm" target="_blank" href="/projects/{{ project.id }}/diagrams/{{ diagram.id }}">新标签页</a>
+  <a class="btn btn-ghost btn-sm" target="_blank" href="/static/apps/topology/index.html?project_id={{ project.id }}&diagram_id={{ diagram.id }}">独立窗口</a>
 </div>
 <div class="editor-frame">
   <iframe id="visioFrame" title="拓扑图编辑器"
-          src="/static/apps/visioweb/index.html?project_id={{ project.id }}&diagram_id={{ diagram.id }}"></iframe>
+          src="/static/apps/topology/index.html?project_id={{ project.id }}&diagram_id={{ diagram.id }}"></iframe>
 </div>
 <script>
 window.TT_EDITOR = {

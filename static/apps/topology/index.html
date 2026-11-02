@@ -7,7 +7,7 @@
 <title>TopoTash · 拓扑编辑器</title>
 <style>
 /* ================================================================
-   VisioWeb v0.35 — 设计系统
+   TopoTash 拓扑编辑器 — 设计系统
    品牌色: Indigo 渐变   |   间距: 8pt 体系   |   圆角: 8/12/16
    ================================================================ */
 :root{
@@ -558,7 +558,7 @@ input[type=range]{width:100%; accent-color:var(--brand-500); height:18px;}
 #shapesLayer.dim > g.hl{opacity:1;filter:drop-shadow(0 0 10px rgba(91,108,240,.85));}
 #shapesLayer.dim g.hl text{font-weight:700;}
 </style>
-<link rel="stylesheet" href="topotash-visio.css">
+<link rel="stylesheet" href="topotash-topology.css">
 <!-- ELK.js 内嵌 (v0.98) -->
 <script>
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.ELK = f()}})(function(){var define,module,exports;return (function(){function r(e,n,t){function o(i,f){if(!n[i]){if(!e[i]){var c="function"==typeof require&&require;if(!f&&c)return c(i,!0);if(u)return u(i,!0);var a=new Error("Cannot find module '"+i+"'");throw a.code="MODULE_NOT_FOUND",a}var p=n[i]={exports:{}};e[i][0].call(p.exports,function(r){var n=e[i][1][r];return o(n||r)},p,p.exports,r,e,n,t)}return n[i].exports}for(var u="function"==typeof require&&require,i=0;i<t.length;i++)o(t[i]);return o}return r})()({1:[function(require,module,exports){
@@ -7573,7 +7573,7 @@ window.TOPOTASH_CTX = (function(){
 
 'use strict';
 /* ================================================================
-   VisioWeb — 纯离线单文件网络拓扑图绘制工具
+   TopoTash 拓扑编辑器 — 纯离线单文件网络拓扑图绘制工具
    数据模型: model.shapes  {id: shape}, model.order[] (z序)
    交互: SVG viewBox 平移/缩放, 智能对齐参考线, 网格吸附, 正交折线
    ================================================================ */
@@ -12101,4 +12101,4 @@ tryLoadELK();
 
 
 
-<script src="topotash-visio-bridge.js"></script>
+<script src="topotash-topology-bridge.js"></script>

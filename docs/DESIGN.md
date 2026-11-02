@@ -332,7 +332,7 @@ POST /api/diagrams/<did>/nodes/<node_key>/followup
 
 ### 5.2 任务台桥接
 
-桥接脚本（`topotash-todo-bridge.js`）：
+桥接脚本（`topotash-tasks-bridge.js`）：
 
 - 读取 URL 的 `project_id`，首次 `GET /todo-state`，赋给任务台的 `store`，调用原 `renderAll()`；
 - 覆盖 `saveStore()`：原逻辑 + 650ms 防抖 `PUT /todo-state`；
@@ -343,7 +343,7 @@ POST /api/diagrams/<did>/nodes/<node_key>/followup
 
 ### 5.3 拓扑编辑器桥接
 
-桥接脚本（`topotash-visio-bridge.js`）：
+桥接脚本（`topotash-topology-bridge.js`）：
 
 - 读取 `project_id/diagram_id`，`GET /content` 后替换画布 `model`，重置 id 计数器、历史栈；
 - 覆盖 `commit()`：原提交逻辑 + 900ms 防抖 `PUT /content`；

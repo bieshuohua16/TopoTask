@@ -14,7 +14,7 @@ from pathlib import Path
 from flask import Flask, jsonify, redirect, render_template, request, url_for
 from werkzeug.exceptions import HTTPException
 
-from db import ApiError, close_db, get_db, init_db, utcnow
+from db import ApiError, close_db, ensure_schema, get_db, init_db, utcnow
 from services import (
     STAGE_HINTS,
     STAGE_LABELS,
@@ -42,9 +42,8 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.json.ensure_ascii = False
     app.teardown_appcontext(close_db)
 
-    # First run convenience: create the schema automatically when the DB is absent.
-    if not Path(app.config["DATABASE"]).exists():
-        init_db(app)
+    # First run convenience: create the schema when the DB is absent/empty.
+    ensure_schema(app)
 
     from api import register_blueprints
 

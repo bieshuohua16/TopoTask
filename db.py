@@ -54,6 +54,26 @@ def init_db(app) -> None:
         conn.close()
 
 
+def ensure_schema(app) -> None:
+    """Create the schema when the DB file is missing, empty, or has no projects table."""
+    db_path = Path(app.config["DATABASE"])
+    needs_init = not db_path.exists() or db_path.stat().st_size == 0
+    if not needs_init:
+        try:
+            conn = sqlite3.connect(db_path)
+            try:
+                row = conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='projects'"
+                ).fetchone()
+            finally:
+                conn.close()
+            needs_init = row is None
+        except sqlite3.DatabaseError:
+            needs_init = True
+    if needs_init:
+        init_db(app)
+
+
 def db_session():
     """Small context manager that commits/rolls back the request connection."""
     db = get_db()

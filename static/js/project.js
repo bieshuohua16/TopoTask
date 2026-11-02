@@ -196,7 +196,7 @@
     const iframe = document.createElement('iframe');
     iframe.id = 'todoFrame';
     iframe.title = '任务台';
-    iframe.src = '/static/apps/todoflow/index.html?' + params.toString();
+    iframe.src = '/static/apps/tasks/index.html?' + params.toString();
     iframe.onload = () => { const loading = wrap.querySelector('.iframe-loading'); if (loading) loading.remove(); };
     wrap.appendChild(iframe);
     todoLoaded = true;
