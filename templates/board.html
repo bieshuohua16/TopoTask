@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}阶段看板 · TopoTash 拓事{% endblock %}
+{% block page %}board{% endblock %}
+{% block crumb %}<span>阶段看板</span>{% endblock %}
+
+{% block content %}
+<section class="page-head">
+  <div>
+    <div class="eyebrow">PRE-SALES PIPELINE</div>
+    <h1>按售前阶段推进</h1>
+    <p>需求调研 → 方案编写 → POC 验证 → 招投标，所有项目的任务自动汇总到对应阶段。</p>
+  </div>
+  <div class="head-actions">
+    <select class="select" id="boardProject">
+      <option value="">全部项目</option>
+    </select>
+    <label class="switch"><input type="checkbox" id="includeDone"><span></span>显示已完成</label>
+  </div>
+</section>
+
+<div class="board" id="board">
+  <div class="board-col"><div class="col-head"><span class="stage-pill research">需求调研</span></div><div class="col-body"><div class="row-skeleton"></div></div></div>
+  <div class="board-col"><div class="col-head"><span class="stage-pill proposal">方案编写</span></div><div class="col-body"><div class="row-skeleton"></div></div></div>
+  <div class="board-col"><div class="col-head"><span class="stage-pill poc">POC 验证</span></div><div class="col-body"><div class="row-skeleton"></div></div></div>
+  <div class="board-col"><div class="col-head"><span class="stage-pill bidding">招投标</span></div><div class="col-body"><div class="row-skeleton"></div></div></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/board.js') }}"></script>
+{% endblock %}

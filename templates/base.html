@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}TopoTash 拓事{% endblock %}</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/topotash.css') }}">
+</head>
+<body data-page="{% block page %}{% endblock %}">
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand" href="/">
+      <span class="brand-mark">
+        <svg viewBox="0 0 32 32" fill="none">
+          <circle cx="9" cy="9" r="4" stroke="currentColor" stroke-width="2"/>
+          <circle cx="23" cy="9" r="4" stroke="currentColor" stroke-width="2"/>
+          <circle cx="16" cy="23" r="4" stroke="currentColor" stroke-width="2"/>
+          <path d="M12.5 11.2 14.7 19M19.5 11.2 17.3 19M13 9h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <span class="brand-text"><b>TopoTash</b><em>拓事 · 售前工作台</em></span>
+    </a>
+
+    <nav class="nav">
+      <a href="/" class="nav-item" data-nav="dashboard">
+        <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>
+        <span>项目总览</span>
+      </a>
+      <a href="/board" class="nav-item" data-nav="board">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 5h4v14H4zM10 5h4v9h-4zM16 5h4v11h-4z"/></svg>
+        <span>阶段看板</span>
+      </a>
+      <a href="/diagrams" class="nav-item" data-nav="diagrams">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.3 7.2 15.7 8.8M7.4 8.2l3.4 7.4M17 9.3l-3.7 6.4"/></svg>
+        <span>拓扑图库</span>
+      </a>
+    </nav>
+
+    <div class="side-projects">
+      <div class="side-head">
+        <span>项目</span>
+        <button class="icon-mini" id="btnSideNewProject" title="新建项目">+</button>
+      </div>
+      <div id="projectNav" class="project-nav">
+        <div class="side-loading">加载中…</div>
+      </div>
+    </div>
+
+    <div class="side-foot">
+      <span class="avatar">售</span>
+      <span class="side-foot-text"><b>售前工程师</b><em>本地 SQLite · 离线可用</em></span>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="crumb">{% block crumb %}<span>项目总览</span>{% endblock %}</div>
+      <div class="top-search">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="globalSearch" placeholder="搜索项目 / 任务 / 拓扑图" autocomplete="off">
+        <kbd>/</kbd>
+        <div class="search-pop" id="searchPop"></div>
+      </div>
+      <button class="btn btn-primary" id="topNewProject">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14"/></svg>
+        新建项目
+      </button>
+    </header>
+
+    <main class="content {% block content_class %}{% endblock %}" id="pageContent">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+
+<div class="modal-root" id="modalRoot"></div>
+<div class="toast-root" id="toastRoot"></div>
+
+<script>
+window.TT_CONFIG = {
+  page: {{ self.page()|tojson }},
+  stages: {{ stages|tojson }},
+  stageLabels: {{ stage_labels|tojson }},
+  statuses: {{ statuses|tojson }},
+  statusLabels: {{ status_labels|tojson }},
+  projectId: {{ (project.id if project else '')|tojson }}
+};
+</script>
+<script src="{{ url_for('static', filename='js/api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/shell.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

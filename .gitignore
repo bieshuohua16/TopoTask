@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# runtime database
+topotash.db
+topotash.db-wal
+topotash.db-shm
+tmp_*.db
+*.db-journal
+
+# local tooling
+.pytest_cache/
+node_modules/

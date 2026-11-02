@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}项目总览 · TopoTash 拓事{% endblock %}
+{% block page %}dashboard{% endblock %}
+{% block crumb %}<span>项目总览</span>{% endblock %}
+
+{% block content %}
+<section class="page-head">
+  <div>
+    <div class="eyebrow">PROJECT PORTFOLIO</div>
+    <h1>售前项目，一屏尽览</h1>
+    <p>以项目为主线，把任务、架构图和每个待跟进节点放在同一条时间线上。</p>
+  </div>
+  <div class="head-actions">
+    <button class="btn btn-ghost" id="btnRefresh">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>
+      刷新
+    </button>
+  </div>
+</section>
+
+<section class="stat-grid" id="statGrid">
+  <div class="stat-card"><span class="stat-label">进行中项目</span><b class="stat-value" data-stat="active_projects">—</b><span class="stat-sub" data-stat="project_total">共 — 个项目</span></div>
+  <div class="stat-card"><span class="stat-label">未完成任务</span><b class="stat-value" data-stat="task_open">—</b><span class="stat-sub"><i class="dot warn"></i><span data-stat="task_overdue">—</span> 个已逾期</span></div>
+  <div class="stat-card"><span class="stat-label">拓扑图</span><b class="stat-value" data-stat="diagram_total">—</b><span class="stat-sub">节点可直接关联任务</span></div>
+  <div class="stat-card"><span class="stat-label">待跟进节点</span><b class="stat-value" data-stat="followup_total">—</b><span class="stat-sub">来自全部架构图</span></div>
+</section>
+
+<section class="section">
+  <div class="section-head">
+    <div>
+      <h2>项目列表</h2>
+      <p>按售前阶段筛选，点击卡片进入项目工作台。</p>
+    </div>
+    <div class="filter-chips" id="stageFilter">
+      <button class="chip active" data-stage="all">全部</button>
+      <button class="chip" data-stage="research">需求调研</button>
+      <button class="chip" data-stage="proposal">方案编写</button>
+      <button class="chip" data-stage="poc">POC 验证</button>
+      <button class="chip" data-stage="bidding">招投标</button>
+    </div>
+  </div>
+  <div class="project-grid" id="projectGrid">
+    <div class="skeleton-card"></div><div class="skeleton-card"></div><div class="skeleton-card"></div>
+  </div>
+  <div class="empty-state hidden" id="projectEmpty">
+    <div class="empty-icon">
+      <svg viewBox="0 0 48 48" fill="none"><rect x="7" y="9" width="34" height="30" rx="5"/><path d="M15 20h18M15 27h12"/></svg>
+    </div>
+    <h3>还没有项目</h3>
+    <p>创建第一个售前项目，然后开始拆任务、画拓扑图。</p>
+    <button class="btn btn-primary" data-action="new-project">新建项目</button>
+  </div>
+</section>
+
+<section class="two-col">
+  <div class="panel">
+    <div class="panel-head">
+      <div><h2>即将到期</h2><p>按截止时间排序的未完成任务</p></div>
+      <a href="/board" class="link-more">阶段看板 →</a>
+    </div>
+    <div class="list-stack" id="upcomingList"><div class="row-skeleton"></div><div class="row-skeleton"></div></div>
+  </div>
+  <div class="panel">
+    <div class="panel-head">
+      <div><h2>节点待跟进</h2><p>拓扑图上标记过的节点</p></div>
+      <span class="panel-badge" id="followupCount">0</span>
+    </div>
+    <div class="list-stack" id="followupList"><div class="row-skeleton"></div><div class="row-skeleton"></div></div>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+{% endblock %}

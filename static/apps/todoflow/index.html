@@ -1,0 +1,2848 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TopoTash · 任务台</title>
+
+<!--
+================================================================================
+  待办清单 TodoFlow — 单页 HTML 应用
+  版本: 2.0-ui (界面优化分支)
+  日期: 2026-06-10
+
+  架构概述:
+    单文件 SPA，无外部依赖。所有 CSS 和 JS 内联在此文件中。
+    数据存储在本地 JSON 文件中（File System Access API），
+    回退到浏览器 localStorage，支持 JSON/CSV 导入导出。
+    内置 AI 助手，通过 OpenAI 兼容 API 智能管理任务。
+
+  核心模块:
+    1. CSS 样式系统    — CSS 变量驱动的主题，修改 :root 即可换肤
+    2. HTML 骨架       — 顶部导航 + 侧边栏 + 主区域 + 详情面板 + 欢迎屏 + AI 面板
+    3. Store 数据层    — 全局 store 对象 + 文件读写 + IndexedDB + localStorage 回退
+    4. Render 渲染层   — 纯函数式 DOM 重建（renderAll 驱动）
+    5. Action 动作层   — 用户交互（CRUD、筛选、拖拽等）
+    6. 导入/导出       — JSON 文件读写 + CSV 导出
+    7. AI 助手         — OpenAI Function Calling，6 个操作函数，多轮对话
+
+  修改指南:
+    - 换主题色：修改 :root 中的 CSS 变量
+    - 加新功能：在 Action 层添加函数，在 Render 层调用
+    - 改数据结构：修改 createEmptyStore + ensureAIFields + 导入校验
+    - 加新视图：参考 renderKanbanView 的模式新增 render 函数
+    - 加 AI 操作：在 getAITools 注册 + executeAIFunction 实现 + buildSystemPrompt 说明
+
+  文件结构:
+    index.html    ← 你正在看的这个文件（单文件版）
+    README.md     ← 项目说明和使用指南
+    docs/DESIGN.md← 详细设计文档和维护手册
+================================================================================
+-->
+
+<style>
+/* ============================================================================
+   CSS 变量系统 — 修改这里可以快速更换整体主题
+   ============================================================================ */
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  /* 基础色 — v2 更温暖柔和的色调 */
+  --bg:#f5f6fa;          /* 页面背景色 */
+  --card:#ffffff;         /* 卡片/面板背景色 */
+  --sidebar-bg:#f8f9fd;  /* 侧边栏背景色（更贴近主背景） */
+
+  /* 品牌主色 — v2 更鲜活的靛蓝 */
+  --primary:#5b63f5;      /* 主色 */
+  --primary-light:#eef0ff;/* 主色浅（选中态背景） */
+  --primary-dark:#454ddb; /* 主色深（按钮 hover） */
+  --primary-gradient:linear-gradient(135deg,#5b63f5 0%,#7c6bf5 100%); /* 主色渐变 */
+
+  /* 文字色 — v2 更柔和的对比度 */
+  --text:#1a1d2e;         /* 主文字色 */
+  --text2:#5c6178;        /* 次要文字色 */
+  --text3:#9498b3;        /* 辅助文字色（最浅） */
+  --border:#e8eaf2;       /* 边框色 */
+  --border-light:#f0f1f7; /* 极浅边框（卡片内） */
+
+  /* 优先级色 — v2 稍微柔和的色调 */
+  --p0:#e84545; --p0bg:#fef2f2;
+  --p1:#f0913a; --p1bg:#fff7eb;
+  --p2:#4e8af4; --p2bg:#eef4ff;
+  --p3:#9498b3; --p3bg:#f8f9fc;
+
+  /* 功能色 */
+  --green:#2ebd6e;        /* 已完成/成功 */
+  --greenbg:#edfcf3;
+  --red:#e84545;          /* 删除/错误 */
+  --redbg:#fef2f2;
+
+  /* 阴影 — v2 更细腻的多层阴影 */
+  --shadow:0 1px 2px rgba(0,0,0,.04),0 2px 8px rgba(0,0,0,.04);
+  --shadow-lg:0 4px 16px rgba(0,0,0,.06),0 1px 3px rgba(0,0,0,.04);
+  --shadow-hover:0 6px 24px rgba(0,0,0,.08),0 2px 6px rgba(0,0,0,.04);
+
+  /* 圆角 */
+  --r:14px;   /* 大圆角（卡片、面板） */
+  --rs:10px;  /* 小圆角（输入框、按钮） */
+  --rr:6px;   /* 极小圆角（标签、徽章） */
+
+  /* 过渡 */
+  --ease:cubic-bezier(.4,0,.2,1); /* 标准缓动 */
+
+  /* 深色模式专用变量（仅 .dark 下生效） */
+  --fn-call-bg:#f0fdf4; --fn-call-color:#166534; --fn-call-border:#bbf7d0;
+  --fn-name-color:#15803d;
+  --code-bg:#f1f5f9;
+  --no-fsa-bg:#fff8e1; --no-fsa-border:#ffe082; --no-fsa-color:#795548;
+  --code-inline-bg:#f5f5f5;
+  --drag-over-bg:#e8e9f3;
+  --hover-tint:rgba(91,99,245,.06);
+  --hover-tint-light:rgba(91,99,245,.03);
+  --primary-shadow-color:rgba(91,99,245,.1);
+  --primary-glow:rgba(91,99,245,.3);
+  --primary-glow-strong:rgba(91,99,245,.4);
+  --primary-glow-light:rgba(91,99,245,.25);
+  --primary-glow-subtle:rgba(91,99,245,.08);
+}
+
+/* ============================================================================
+   深色模式 — 在 <html> 上添加 .dark 类即可切换
+   ============================================================================ */
+html.dark{
+  /* 基础色 */
+  --bg:#1a1d2e;
+  --card:#242842;
+  --sidebar-bg:#1e2235;
+
+  /* 品牌主色 — 深色模式下稍微提亮 */
+  --primary:#7c83ff;
+  --primary-light:rgba(124,131,255,.12);
+  --primary-dark:#6b72f5;
+  --primary-gradient:linear-gradient(135deg,#6b72f5 0%,#8b7df7 100%);
+
+  /* 文字色 */
+  --text:#e8eaf6;
+  --text2:#9a9ec0;
+  --text3:#5c6088;
+  --border:#2e3350;
+  --border-light:#262a44;
+
+  /* 优先级色 — 深色模式下背景更深邃 */
+  --p0:#f06565; --p0bg:rgba(240,101,101,.12);
+  --p1:#f5a653; --p1bg:rgba(245,166,83,.12);
+  --p2:#6ba0f7; --p2bg:rgba(107,160,247,.12);
+  --p3:#5c6088; --p3bg:rgba(92,96,136,.1);
+
+  /* 功能色 */
+  --green:#3dd68c;
+  --greenbg:rgba(61,214,140,.12);
+  --red:#f06565;
+  --redbg:rgba(240,101,101,.12);
+
+  /* 阴影 — 深色模式下阴影更深更柔 */
+  --shadow:0 1px 3px rgba(0,0,0,.2),0 2px 10px rgba(0,0,0,.15);
+  --shadow-lg:0 4px 20px rgba(0,0,0,.25),0 1px 4px rgba(0,0,0,.15);
+  --shadow-hover:0 8px 30px rgba(0,0,0,.3),0 2px 8px rgba(0,0,0,.2);
+
+  /* 深色模式专用变量 */
+  --fn-call-bg:rgba(16,185,129,.08); --fn-call-color:#6ee7b7; --fn-call-border:rgba(16,185,129,.2);
+  --fn-name-color:#34d399;
+  --code-bg:rgba(255,255,255,.06);
+  --no-fsa-bg:rgba(245,158,11,.1); --no-fsa-border:rgba(245,158,11,.3); --no-fsa-color:#fbbf24;
+  --code-inline-bg:rgba(255,255,255,.06);
+  --drag-over-bg:rgba(124,131,255,.08);
+  --hover-tint:rgba(124,131,255,.08);
+  --hover-tint-light:rgba(124,131,255,.04);
+  --primary-shadow-color:rgba(124,131,255,.15);
+  --primary-glow:rgba(124,131,255,.35);
+  --primary-glow-strong:rgba(124,131,255,.45);
+  --primary-glow-light:rgba(124,131,255,.3);
+  --primary-glow-subtle:rgba(124,131,255,.1);
+}
+
+/* ============================================================================
+   全局基础样式
+   ============================================================================ */
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif;
+  background:var(--bg);color:var(--text);
+  height:100vh;overflow:hidden;font-size:14px;line-height:1.6;
+  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
+  transition:background .3s var(--ease),color .3s var(--ease)
+}
+button{font-family:inherit;cursor:pointer}
+input,textarea,select{font-family:inherit}
+
+/* ============================================================================
+   页面布局 — v2 侧栏驱动布局（参考 Todoist/Things 3）
+   ┌──────────┬───────────────────────┐
+   │          │                       │
+   │ SIDEBAR  │    MAIN AREA          │
+   │ (280px)  │  (task list + detail) │
+   │ Logo     │                       │
+   │ Search   │                       │
+   │ Nav      │                       │
+   │ Projects │                       │
+   │ Tags     │                       │
+   ├──────────┴───────────────────────┤
+   │         STATUSBAR (32px)         │
+   └──────────────────────────────────┘
+   去掉了顶部导航栏，所有导航元素整合进侧栏。
+   ============================================================================ */
+.app{display:grid;grid-template-columns:280px 1fr;grid-template-rows:1fr 32px;height:100vh}
+.topbar{display:none} /* 隐藏原有顶栏，导航已整合进侧栏 */
+.sidebar{grid-row:1;background:var(--sidebar-bg);border-right:1px solid var(--border);overflow-y:auto;display:flex;flex-direction:column;transition:background .3s var(--ease),border-color .3s var(--ease)}
+.main-area{grid-row:1;display:flex;overflow:hidden;position:relative}
+.task-panel{flex:1;overflow-y:auto;padding:28px 32px 20px;display:flex;flex-direction:column}
+/* 详情面板 — 右侧滑出，可折叠 */
+.detail-panel{width:400px;background:var(--card);border-left:1px solid var(--border);overflow-y:auto;transition:width .3s var(--ease),padding .3s var(--ease),background .3s var(--ease),border-color .3s var(--ease);flex-shrink:0}
+.detail-panel.collapsed{width:0;overflow:hidden;padding:0;border:none}
+.statusbar{grid-column:1/-1;grid-row:2;background:var(--card);border-top:1px solid var(--border);display:flex;align-items:center;padding:0 24px;gap:20px;font-size:12px;color:var(--text3);transition:background .3s var(--ease),border-color .3s var(--ease),color .3s var(--ease)}
+
+/* 自定义滚动条（Webkit） */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--text3)}
+
+/* ============================================================================
+   顶部导航栏组件 — v2 更精致的视觉
+   ============================================================================ */
+.app-logo{font-size:16px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:9px;white-space:nowrap;letter-spacing:-.3px}
+.app-logo .logo-icon{width:30px;height:30px;border-radius:9px;background:var(--primary-gradient);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.app-logo .logo-icon svg{width:16px;height:16px;color:#fff;stroke-width:2.5}
+.search-box{flex:1;max-width:420px;position:relative}
+.search-box input{width:100%;padding:8px 14px 8px 38px;border:1.5px solid var(--border);border-radius:var(--rs);font-size:13px;background:var(--bg);outline:none;transition:all .25s var(--ease);color:var(--text)}
+.search-box input:focus{border-color:var(--primary);background:var(--card);box-shadow:0 0 0 3px var(--primary-shadow-color)}
+.search-box input::placeholder{color:var(--text3)}
+.search-box svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:var(--text3);transition:color .2s}
+.search-box input:focus ~ svg{color:var(--primary)}
+/* 视图切换按钮组 — v2 pill 样式 */
+.view-toggle{display:flex;background:var(--bg);border-radius:var(--rs);padding:3px;gap:2px;border:1px solid var(--border-light)}
+.view-btn{padding:6px 16px;border:none;background:transparent;border-radius:8px;font-size:13px;color:var(--text2);transition:all .25s var(--ease);font-weight:500;display:flex;align-items:center;gap:5px}
+.view-btn svg{width:15px;height:15px}
+.view-btn.active{background:var(--card);color:var(--primary);box-shadow:var(--shadow)}
+.view-btn:not(.active):hover{color:var(--text)}
+.topbar-actions{display:flex;gap:4px;margin-left:auto}
+.icon-btn{width:36px;height:36px;border:none;background:transparent;border-radius:var(--rs);display:flex;align-items:center;justify-content:center;color:var(--text2);transition:all .2s var(--ease);position:relative}
+.icon-btn svg{width:18px;height:18px;stroke-width:1.8}
+.icon-btn:hover{background:var(--bg);color:var(--primary)}
+.icon-btn .badge{position:absolute;top:4px;right:4px;width:7px;height:7px;background:var(--green);border-radius:50%;border:1.5px solid var(--card)}
+
+/* ============================================================================
+   侧边栏组件
+   - .sb-section: 分组容器
+   - .sb-item: 导航项（智能列表/项目分类）
+   - .tag-cloud + .tag-chip: 标签筛选区
+   ============================================================================ */
+.sb-section{padding:0 16px;margin-bottom:20px}
+.sb-title{font-size:11px;font-weight:600;text-transform:uppercase;color:var(--text3);letter-spacing:.8px;margin-bottom:8px;padding:0 10px}
+.sb-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--rs);cursor:pointer;font-size:13px;color:var(--text);transition:all .2s var(--ease);user-select:none}
+.sb-item:hover{background:var(--hover-tint)}
+.sb-item.active{background:var(--primary-light);color:var(--primary);font-weight:500}
+.sb-item svg{width:18px;height:18px;flex-shrink:0;opacity:.55;transition:opacity .2s}
+.sb-item.active svg{opacity:1;color:var(--primary)}
+.sb-item .count{margin-left:auto;font-size:11px;color:var(--text3);background:transparent;padding:0;font-weight:500}
+.sb-item.active .count{color:var(--primary);opacity:.7}
+.sb-item .sb-del{display:none;margin-left:4px;width:18px;height:18px;border:none;background:transparent;color:var(--text3);border-radius:4px;align-items:center;justify-content:center;font-size:14px;cursor:pointer}
+.sb-item:hover .sb-del{display:flex}
+.sb-item .sb-del:hover{background:var(--p0bg);color:var(--p0)}
+.add-project{display:flex;align-items:center;gap:8px;padding:8px 12px;border-radius:var(--rs);cursor:pointer;font-size:13px;color:var(--text3);border:1.5px dashed var(--border);margin:0 16px;transition:all .25s var(--ease)}
+.add-project:hover{border-color:var(--primary);color:var(--primary);background:var(--hover-tint-light)}
+.tag-cloud{display:flex;flex-wrap:wrap;gap:6px;padding:0 10px}
+.tag-chip{padding:4px 12px;border-radius:14px;font-size:12px;cursor:pointer;transition:all .2s var(--ease);border:1px solid var(--border);color:var(--text2);user-select:none;font-weight:500;display:inline-flex;align-items:center;gap:4px}
+.tag-chip:hover{border-color:var(--primary);color:var(--primary)}
+.tag-chip.active{background:var(--primary);color:#fff;border-color:var(--primary);box-shadow:0 2px 8px var(--primary-glow-light)}
+.tag-chip .tag-del{display:none;width:14px;height:14px;border-radius:50%;font-size:10px;line-height:14px;text-align:center;background:rgba(0,0,0,.12);color:inherit;opacity:.7;cursor:pointer;transition:opacity .15s}
+.tag-chip:hover .tag-del{display:inline-flex;align-items:center;justify-content:center}
+.tag-chip .tag-del:hover{opacity:1;background:rgba(0,0,0,.22)}
+
+/* ============================================================================
+   侧栏头部 — 整合 Logo + 搜索 + 操作（替代顶栏）
+   ============================================================================ */
+.sidebar-header{padding:20px 20px 0;flex-shrink:0}
+.sidebar-logo{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.sidebar-logo .logo-icon{width:32px;height:32px;border-radius:10px;background:var(--primary-gradient);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sidebar-logo .logo-icon svg{width:17px;height:17px;color:#fff;stroke-width:2.5}
+.sidebar-logo .logo-text{font-size:18px;font-weight:700;letter-spacing:-.5px;color:var(--text)}
+.sidebar-search{position:relative;margin-bottom:12px}
+.sidebar-search input{width:100%;padding:9px 14px 9px 38px;border:1.5px solid var(--border);border-radius:var(--rs);font-size:13px;background:var(--card);outline:none;transition:all .25s var(--ease);color:var(--text)}
+.sidebar-search input:focus{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-shadow-color)}
+.sidebar-search input::placeholder{color:var(--text3)}
+.sidebar-search svg{position:absolute;left:12px;top:50%;transform:translateY(-50%);width:16px;height:16px;color:var(--text3)}
+.sidebar-search input:focus ~ svg{color:var(--primary)}
+/* 侧栏操作栏 */
+.sidebar-toolbar{display:flex;gap:4px;margin-bottom:6px;flex-wrap:wrap}
+.sidebar-toolbar .tool-btn{padding:6px 12px;border:1px solid var(--border);border-radius:var(--rs);font-size:12px;background:var(--card);color:var(--text2);cursor:pointer;transition:all .2s var(--ease);display:flex;align-items:center;gap:5px;font-weight:500}
+.sidebar-toolbar .tool-btn svg{width:14px;height:14px;stroke-width:1.8}
+.sidebar-toolbar .tool-btn:hover{border-color:var(--primary);color:var(--primary)}
+.sidebar-toolbar .tool-btn.active{background:var(--primary-light);color:var(--primary);border-color:var(--primary)}
+.sidebar-divider{height:1px;background:var(--border);margin:12px 20px 16px}
+
+/* ============================================================================
+   任务列表区域
+   - .list-header: 列表标题 + 筛选条
+   - .task-group: 按优先级分组的容器
+   - .task-card: 单个任务卡片（核心交互单元）
+   ============================================================================ */
+.list-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-shrink:0}
+.list-header h2{font-size:24px;font-weight:700;letter-spacing:-.5px;color:var(--text)}
+.filter-bar{display:flex;gap:6px}
+.filter-chip{padding:5px 13px;border-radius:14px;font-size:12px;border:1px solid var(--border);background:transparent;cursor:pointer;color:var(--text2);transition:all .2s var(--ease);user-select:none;font-weight:500}
+.filter-chip:hover{border-color:var(--primary)}
+.filter-chip.active{background:var(--primary-light);color:var(--primary);border-color:var(--primary)}
+.task-scroll{flex:1;overflow-y:auto;min-height:0}
+.task-group{margin-bottom:28px}
+.task-group-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text3);margin-bottom:12px;display:flex;align-items:center;gap:8px;padding-bottom:8px;border-bottom:1px solid var(--border-light)}
+.task-group-title .dot{width:8px;height:8px;border-radius:50%}
+
+/* 任务行 — v2 扁平化设计（参考 Todoist/Things 3）*/
+.task-card{background:transparent;border-radius:0;padding:12px 4px;margin-bottom:0;box-shadow:none;cursor:pointer;transition:background .15s var(--ease);border:none;border-bottom:1px solid var(--border-light);display:flex;align-items:center;gap:12px;position:relative}
+.task-card:hover{background:var(--hover-tint-light)}
+.task-card.selected{background:var(--primary-light);border-bottom-color:var(--primary-light)}
+.task-card.done-card{opacity:.4}
+.task-card.done-card .task-title{text-decoration:line-through;color:var(--text3)}
+.task-card.dragging{opacity:.4}
+/* 优先级左色条 */
+.task-card::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:20px;border-radius:2px}
+.task-card.pri-0::before{background:var(--p0)}
+.task-card.pri-1::before{background:var(--p1)}
+.task-card.pri-2::before{background:var(--p2)}
+.task-card.pri-3::before{background:transparent}
+.task-card.drag-over-top{border-top:2px solid var(--primary);margin-top:-2px}
+.task-card.drag-over-bottom{border-bottom:2px solid var(--primary);margin-bottom:-2px}
+
+/* 任务复选框（圆形） */
+.task-check{width:21px;height:21px;border-radius:50%;border:2px solid var(--border);flex-shrink:0;cursor:pointer;display:flex;align-items:center;justify-content:center;margin-top:1px;transition:all .25s var(--ease)}
+.task-check:hover{border-color:var(--primary);background:var(--hover-tint)}
+.task-check.checked{background:var(--green);border-color:var(--green);transform:scale(1.05)}
+.task-check svg{display:none;width:12px;height:12px;color:#fff;stroke-width:2.5}
+.task-check.checked svg{display:block}
+
+/* 卡片内容区 */
+.task-body{flex:1;min-width:0}
+.task-title{font-size:14px;font-weight:500;line-height:1.5;word-break:break-word}
+.task-meta{display:flex;align-items:center;gap:7px;margin-top:5px;flex-wrap:wrap}
+
+/* 优先级色标徽章 */
+.pri-badge{padding:1px 7px;border-radius:4px;font-size:11px;font-weight:600}
+.pri-badge.p0{background:var(--p0bg);color:var(--p0)}
+.pri-badge.p1{background:var(--p1bg);color:var(--p1)}
+.pri-badge.p2{background:var(--p2bg);color:var(--p2)}
+.pri-badge.p3{background:var(--p3bg);color:var(--p3)}
+
+/* 日期、标签、子任务进度 */
+.task-date{font-size:12px;color:var(--text2);display:flex;align-items:center;gap:3px}
+.task-date.overdue{color:var(--p0);font-weight:500}
+.task-recur{font-size:11px;color:var(--primary);background:var(--primary-light);padding:1px 7px;border-radius:10px;font-weight:500;display:inline-flex;align-items:center;gap:3px;white-space:nowrap}
+.task-recur::before{content:'↻';font-size:12px}
+.recur-info{font-size:11px;color:var(--text3);margin-top:4px;padding-left:2px}
+.task-tag-sm{padding:1px 7px;border-radius:10px;font-size:11px;background:var(--bg);color:var(--text2)}
+.sub-prog{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--text2)}
+.prog-bar{width:44px;height:4px;border-radius:2px;background:var(--bg);overflow:hidden}
+.prog-fill{height:100%;border-radius:2px;background:var(--primary);transition:width .3s}
+.card-subs{margin-top:6px;display:flex;flex-direction:column;gap:2px}
+.card-sub{display:flex;align-items:center;gap:6px;padding:3px 6px;border-radius:var(--rs);cursor:pointer;transition:background .15s;font-size:12px;user-select:none}
+.card-sub:hover{background:var(--hover-tint-light)}
+.card-sub-ck{width:14px;height:14px;border-radius:3px;border:1.5px solid var(--border);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.card-sub-ck svg{display:none;width:9px;height:9px;color:#fff}
+.card-sub-ck.ck-on{background:var(--green);border-color:var(--green)}
+.card-sub-ck.ck-on svg{display:block}
+.card-sub-tt{color:var(--text2);line-height:1.3}
+.card-sub.cs-done .card-sub-tt{text-decoration:line-through;color:var(--text3)}
+
+/* 拖拽手柄（左侧六个小圆点） */
+.drag-h{cursor:grab;color:var(--border);display:flex;flex-direction:column;gap:2px;padding:3px 1px;flex-shrink:0}
+.drag-h span{display:block;width:4px;height:4px;border-radius:50%;background:var(--border)}
+.task-card:hover .drag-h span{background:var(--text3)}
+
+/* 卡片操作按钮（悬浮显示） */
+.task-actions{display:flex;gap:2px;flex-shrink:0;opacity:0;transition:opacity .15s}
+.task-card:hover .task-actions{opacity:1}
+.task-act-btn{width:26px;height:26px;border:none;background:transparent;border-radius:6px;display:flex;align-items:center;justify-content:center;color:var(--text3);font-size:14px;cursor:pointer;transition:all .15s}
+.task-act-btn:hover{background:var(--bg);color:var(--text)}
+.task-act-btn.del:hover{background:var(--p0bg);color:var(--p0)}
+
+/* ============================================================================
+   快速添加区 — 列表底部的输入框
+   ============================================================================ */
+.quick-add{flex-shrink:0;padding-top:12px}
+.quick-add-inner{display:flex;gap:10px;background:var(--card);border-radius:var(--r);padding:12px 16px;box-shadow:var(--shadow-lg);border:1.5px solid var(--border);align-items:center;transition:border-color .25s var(--ease)}
+.quick-add-inner:focus-within{border-color:var(--primary);box-shadow:var(--shadow-lg),0 0 0 3px var(--primary-shadow-color)}
+.quick-add-inner input{flex:1;border:none;font-size:14px;outline:none;background:transparent;color:var(--text)}
+/* 快速添加的优先级选择按钮 */
+.qa-pri{width:28px;height:28px;border-radius:6px;border:2px solid transparent;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s}
+.qa-pri.p0{background:var(--p0bg);color:var(--p0)}.qa-pri.p1{background:var(--p1bg);color:var(--p1)}
+.qa-pri.p2{background:var(--p2bg);color:var(--p2)}.qa-pri.p3{background:var(--p3bg);color:var(--p3)}
+.qa-pri.sel{border-color:currentColor}
+.quick-add-btn{width:32px;height:32px;border-radius:50%;background:var(--primary-gradient);color:#fff;border:none;display:flex;align-items:center;justify-content:center;font-size:18px;transition:all .25s var(--ease);box-shadow:0 2px 8px var(--primary-glow)}
+.quick-add-btn:hover{transform:scale(1.1);box-shadow:0 4px 12px var(--primary-glow-strong)}
+
+/* ============================================================================
+   看板视图 — 三列布局（待办 / 进行中 / 已完成）
+   ============================================================================ */
+.kanban-board{display:none;gap:16px;height:100%;overflow-x:auto;padding-bottom:16px}
+.kanban-board.active{display:flex}
+.kb-col{min-width:280px;flex:1;background:var(--bg);border-radius:var(--r);padding:16px;display:flex;flex-direction:column;border:1px solid var(--border-light)}
+.kb-col-hd{display:flex;align-items:center;gap:8px;margin-bottom:14px}
+.kb-col-title{font-size:13px;font-weight:600;text-transform:uppercase;letter-spacing:.5px}
+.kb-col-cnt{font-size:11px;color:var(--text2);background:var(--card);padding:2px 8px;border-radius:10px;font-weight:500;border:1px solid var(--border-light)}
+.kb-cards{flex:1;overflow-y:auto;min-height:60px}
+.kb-card{background:var(--card);border-radius:var(--rs);padding:12px 14px;margin-bottom:8px;box-shadow:var(--shadow);cursor:pointer;border:1.5px solid transparent;transition:all .25s var(--ease)}
+.kb-card:hover{box-shadow:var(--shadow-hover);transform:translateY(-1px)}
+.kb-card.kb-selected{border-color:var(--primary);box-shadow:0 0 0 3px var(--primary-glow-subtle)}
+.kb-card.kb-done{opacity:.4}
+.kb-card.kb-done .task-title{text-decoration:line-through}
+.kb-card.dragging{opacity:.4}
+.kb-col.drag-over{background:var(--drag-over-bg)}
+
+/* ============================================================================
+   详情面板 — 点击任务卡片后右侧展开
+   ============================================================================ */
+.det-hd{padding:16px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.det-hd h3{font-size:15px;font-weight:600}
+.det-body{padding:16px 18px}
+.det-field{margin-bottom:16px}
+.det-label{font-size:11px;font-weight:600;color:var(--text2);margin-bottom:5px;text-transform:uppercase;letter-spacing:.3px}
+.det-input{width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:var(--rs);font-size:14px;outline:none;transition:border .2s;background:var(--card);color:var(--text)}
+.det-input:focus{border-color:var(--primary)}
+.det-textarea{width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:var(--rs);font-size:13px;outline:none;resize:vertical;min-height:70px;font-family:inherit;transition:border .2s;line-height:1.6;background:var(--card);color:var(--text)}
+.det-textarea:focus{border-color:var(--primary)}
+.det-select{width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:var(--rs);font-size:13px;outline:none;background:var(--card);cursor:pointer;color:var(--text)}
+
+/* 子任务列表 */
+.sub-list{list-style:none}
+.sub-item{display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid var(--bg);font-size:13px}
+.sub-check{width:16px;height:16px;border-radius:4px;border:2px solid var(--border);cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.sub-check.sc-done{background:var(--green);border-color:var(--green)}
+.sub-check svg{display:none;width:10px;height:10px;color:#fff}
+.sub-check.sc-done svg{display:block}
+.sub-title{flex:1}
+.sub-title.sub-done{text-decoration:line-through;color:var(--text3)}
+.sub-del{width:20px;height:20px;border:none;background:transparent;color:var(--text3);cursor:pointer;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:13px;opacity:0;transition:opacity .15s}
+.sub-item:hover .sub-del{opacity:1}
+.sub-del:hover{background:var(--p0bg);color:var(--p0)}
+.add-sub{display:flex;align-items:center;gap:5px;padding:5px 0;font-size:13px;color:var(--primary);cursor:pointer}
+.sub-add-row{display:flex;gap:6px;padding:5px 0}
+.sub-add-row input{flex:1;padding:5px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;outline:none;background:var(--card);color:var(--text)}
+.sub-add-row input:focus{border-color:var(--primary)}
+.sub-add-row button{padding:4px 10px;border:none;border-radius:6px;font-size:12px;cursor:pointer}
+.sub-add-ok{background:var(--primary);color:#fff}
+.sub-add-cancel{background:var(--bg);color:var(--text2)}
+
+/* 优先级选择器（四色按钮组） */
+.pri-select{display:flex;gap:5px}
+.pri-opt{padding:5px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;border:2px solid transparent;transition:all .15s}
+.pri-opt.p0{background:var(--p0bg);color:var(--p0)}.pri-opt.p1{background:var(--p1bg);color:var(--p1)}
+.pri-opt.p2{background:var(--p2bg);color:var(--p2)}.pri-opt.p3{background:var(--p3bg);color:var(--p3)}
+.pri-opt.sel{border-color:currentColor}
+
+/* 标签管理 */
+.det-tags{display:flex;flex-wrap:wrap;gap:5px}
+.det-tag{padding:3px 10px;border-radius:12px;font-size:12px;background:var(--primary-light);color:var(--primary);display:flex;align-items:center;gap:4px}
+.det-tag .rm-tag{cursor:pointer;opacity:.6;font-size:14px;line-height:1}
+.det-tag .rm-tag:hover{opacity:1}
+.add-tag-btn{padding:3px 10px;border-radius:12px;font-size:12px;border:1px dashed var(--border);color:var(--text2);cursor:pointer;transition:all .15s}
+.add-tag-btn:hover{border-color:var(--primary);color:var(--primary)}
+.det-ts{font-size:12px;color:var(--text2);display:flex;flex-direction:column;gap:3px;padding-top:10px;border-top:1px solid var(--border)}
+.det-danger{margin-top:16px;padding-top:12px;border-top:1px solid var(--border)}
+.det-del-btn{width:100%;padding:8px;border:1px solid var(--p0);background:var(--p0bg);color:var(--p0);border-radius:var(--rs);font-size:13px;font-weight:500;cursor:pointer;transition:all .15s}
+.det-del-btn:hover{background:var(--p0);color:#fff}
+
+/* ============================================================================
+   弹窗 / 提示
+   ============================================================================ */
+/* 模态弹窗（添加项目等） */
+.modal-overlay{position:fixed;inset:0;background:rgba(15,18,30,.4);z-index:500;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .3s var(--ease);backdrop-filter:blur(4px)}
+.modal-overlay.show{opacity:1;pointer-events:auto}
+.modal{background:var(--card);border-radius:18px;padding:28px;width:440px;max-width:90vw;box-shadow:0 24px 80px rgba(0,0,0,.12),0 4px 16px rgba(0,0,0,.06)}
+.modal h3{font-size:16px;font-weight:600;margin-bottom:16px}
+.modal input{width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:var(--rs);font-size:14px;outline:none;margin-bottom:12px;background:var(--bg);color:var(--text)}
+.modal input:focus{border-color:var(--primary)}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end}
+.modal-actions button{padding:7px 18px;border:none;border-radius:var(--rs);font-size:13px;cursor:pointer}
+.btn-primary{background:var(--primary);color:#fff}
+.btn-primary:hover{background:var(--primary-dark)}
+.btn-cancel{background:var(--bg);color:var(--text2)}
+
+/* 标签选择下拉框 */
+.tag-picker{position:relative;display:inline-block}
+.tag-dropdown{position:absolute;top:100%;left:0;background:var(--card);border:1px solid var(--border);border-radius:var(--rs);box-shadow:var(--shadow-lg);padding:6px;z-index:100;min-width:160px;display:none}
+.tag-dropdown.open{display:block}
+.tag-dropdown-item{padding:5px 10px;border-radius:6px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:6px;transition:background .1s}
+.tag-dropdown-item:hover{background:var(--bg)}
+.tag-dropdown-item .tdi-check{width:14px;height:14px;border:1.5px solid var(--border);border-radius:3px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.tag-dropdown-item .tdi-check.tdi-on{background:var(--primary);border-color:var(--primary)}
+.tag-new-row{display:flex;gap:4px;padding:4px 6px;border-top:1px solid var(--border);margin-top:4px}
+.tag-new-row input{flex:1;padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:12px;outline:none;background:var(--card);color:var(--text)}
+.tag-new-row button{padding:4px 8px;border:none;background:var(--primary);color:#fff;border-radius:6px;font-size:12px;cursor:pointer}
+
+/* 空状态提示 */
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;color:var(--text3)}
+.empty-state svg{width:64px;height:64px;margin-bottom:16px;opacity:.3}
+.empty-state p{font-size:14px;margin-bottom:4px}
+.empty-state small{font-size:12px}
+
+/* Toast 提示（右上角弹出，自动消失） */
+.toast-container{position:fixed;top:20px;right:20px;z-index:600;display:flex;flex-direction:column;gap:8px}
+.toast{background:var(--card);border-radius:var(--rs);padding:12px 18px;box-shadow:var(--shadow-lg);font-size:13px;border-left:3px solid var(--green);animation:toastIn .4s var(--ease);color:var(--text);max-width:360px}
+@keyframes toastIn{from{transform:translateX(24px);opacity:0}to{transform:translateX(0);opacity:1}}
+
+.hidden{display:none}
+
+/* ============================================================================
+   AI 助手面板 — 右侧滑出的聊天窗口
+   ============================================================================ */
+.ai-panel{position:absolute;top:0;right:0;width:420px;min-width:300px;max-width:800px;height:100%;background:var(--card);border-left:1px solid var(--border);display:flex;flex-direction:column;z-index:20;transform:translateX(100%);transition:transform .35s var(--ease),background .3s var(--ease),border-color .3s var(--ease)}
+.ai-panel.open{transform:translateX(0)}
+.ai-panel.ai-resizing{transition:none!important}
+/* AI 面板拖拽调整宽度的手柄 */
+.ai-resize-handle{position:absolute;left:-4px;top:0;width:8px;height:100%;cursor:col-resize;z-index:25}
+.ai-resize-handle:hover::after,.ai-resize-handle:active::after{content:'';position:absolute;left:3px;top:50%;transform:translateY(-50%);width:3px;height:32px;border-radius:2px;background:var(--primary);opacity:.6}
+.ai-hd{padding:16px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0}
+.ai-hd-title{font-size:15px;font-weight:600;flex:1;letter-spacing:-.2px}
+.ai-hd-dot{width:8px;height:8px;border-radius:50%;background:var(--text3);transition:background .3s}
+.ai-hd-dot.connected{background:var(--green);box-shadow:0 0 6px rgba(46,189,110,.4)}
+.ai-msgs{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+.ai-msg{padding:10px 14px;border-radius:12px;font-size:13px;line-height:1.65;max-width:92%;word-break:break-word;white-space:pre-wrap}
+.ai-msg.user{background:var(--primary);color:#fff;align-self:flex-end;border-bottom-right-radius:4px}
+.ai-msg.assistant{background:var(--bg);color:var(--text);align-self:flex-start;border-bottom-left-radius:4px;white-space:normal}
+.ai-msg.fn-call{background:var(--fn-call-bg);color:var(--fn-call-color);font-size:12px;border:1px solid var(--fn-call-border);align-self:flex-start}
+.ai-msg .fn-name{font-weight:600;color:var(--fn-name-color)}
+.ai-msg.error{background:var(--p0bg);color:var(--p0);border:1px solid rgba(240,101,101,.3)}
+.ai-typing{display:none;align-self:flex-start;padding:10px 14px;background:var(--bg);border-radius:12px;gap:4px;align-items:center}
+.ai-typing.show{display:flex}
+.ai-typing span{width:6px;height:6px;border-radius:50%;background:var(--text3);animation:typingDot 1.4s infinite}
+.ai-typing span:nth-child(2){animation-delay:.2s}
+.ai-typing span:nth-child(3){animation-delay:.4s}
+@keyframes typingDot{0%,60%,100%{opacity:.3;transform:translateY(0)}30%{opacity:1;transform:translateY(-4px)}}
+.ai-quick{padding:10px 14px;display:flex;gap:6px;flex-wrap:wrap;border-top:1px solid var(--border);flex-shrink:0}
+.ai-quick-btn{padding:5px 12px;border-radius:14px;font-size:12px;border:1px solid var(--border);background:var(--card);color:var(--text2);cursor:pointer;transition:all .2s var(--ease);white-space:nowrap;font-weight:500}
+.ai-quick-btn:hover{border-color:var(--primary);color:var(--primary);background:var(--primary-light)}
+.ai-input-area{padding:12px 14px;border-top:1px solid var(--border);display:flex;gap:10px;align-items:flex-end;flex-shrink:0;background:var(--card)}
+.ai-input{flex:1;padding:10px 14px;border:1.5px solid var(--border);border-radius:var(--rs);font-size:13px;outline:none;resize:none;min-height:38px;max-height:120px;font-family:inherit;line-height:1.5;transition:all .25s var(--ease);background:var(--bg);color:var(--text)}
+.ai-input:focus{border-color:var(--primary);background:var(--card);box-shadow:0 0 0 3px var(--primary-glow-subtle)}
+.ai-send{width:38px;height:38px;border-radius:50%;background:var(--primary-gradient);color:#fff;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0;transition:all .25s var(--ease);box-shadow:0 2px 8px var(--primary-glow)}
+.ai-send:hover{transform:scale(1.08);box-shadow:0 4px 14px var(--primary-glow-strong)}
+.ai-send:disabled{background:var(--border);cursor:not-allowed;transform:none;box-shadow:none}
+.ai-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;height:100%;color:var(--text3);text-align:center;padding:40px}
+.ai-empty svg{width:48px;height:48px;margin-bottom:12px;opacity:.25}
+.ai-empty p{font-size:13px;margin-bottom:4px}
+.ai-empty small{font-size:11px}
+
+/* AI 消息中的 Markdown 渲染样式 */
+.ai-msg table{border-collapse:collapse;width:100%;margin:8px 0;font-size:12px;white-space:normal}
+.ai-msg th{background:var(--primary-light);color:var(--primary);font-weight:600;padding:6px 10px;border:1px solid var(--border);text-align:left}
+.ai-msg td{padding:5px 10px;border:1px solid var(--border)}
+.ai-msg tr:nth-child(even) td{background:var(--card)}
+.ai-msg h2{font-size:15px;font-weight:700;margin:12px 0 6px;letter-spacing:-.2px}
+.ai-msg h3{font-size:14px;font-weight:600;margin:10px 0 4px}
+.ai-msg h4{font-size:13px;font-weight:600;margin:8px 0 3px}
+.ai-msg hr{border:none;border-top:1px solid var(--border);margin:10px 0}
+.ai-msg blockquote{border-left:3px solid var(--primary);padding-left:10px;color:var(--text2);margin:6px 0;font-size:12px}
+.ai-msg ol,.ai-msg ul{padding-left:18px;margin:4px 0}
+.ai-msg em{font-style:italic}
+
+/* 设置弹窗扩展 */
+.settings-modal{width:480px}
+.settings-tabs{display:flex;gap:2px;margin-bottom:16px;background:var(--bg);border-radius:var(--rs);padding:3px}
+.settings-tab{flex:1;padding:7px;border:none;background:transparent;border-radius:6px;font-size:13px;color:var(--text2);cursor:pointer;transition:all .15s}
+.settings-tab.active{background:var(--card);color:var(--primary);box-shadow:var(--shadow);font-weight:500}
+.settings-field{margin-bottom:14px}
+.settings-field label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px}
+.settings-field input,.settings-field select{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:var(--rs);font-size:13px;outline:none;transition:border .2s;background:var(--card);color:var(--text)}
+.settings-field input:focus,.settings-field select:focus{border-color:var(--primary)}
+.settings-field small{font-size:11px;color:var(--text3);margin-top:2px;display:block}
+.settings-test{padding:7px 16px;border:1px solid var(--primary);background:var(--primary-light);color:var(--primary);border-radius:var(--rs);font-size:13px;cursor:pointer;transition:all .15s}
+.settings-test:hover{background:var(--primary);color:#fff}
+.settings-test.testing{opacity:.6;cursor:wait}
+
+/* ============================================================================
+   欢迎屏 / 文件选择界面 — 首次打开或文件丢失时显示
+   ============================================================================ */
+.welcome-overlay{position:fixed;inset:0;z-index:1000;background:var(--bg);display:flex;align-items:center;justify-content:center}
+.welcome-overlay.hidden{display:none}
+.welcome-card{background:var(--card);border-radius:20px;padding:48px 44px;width:480px;max-width:90vw;box-shadow:var(--shadow-lg);text-align:center}
+.welcome-card h2{font-size:24px;font-weight:700;margin-bottom:10px;letter-spacing:-.5px}
+.welcome-card p{color:var(--text2);font-size:14px;margin-bottom:28px;line-height:1.7}
+.welcome-card .welcome-logo{margin-bottom:20px;display:flex;justify-content:center}
+.welcome-logo-icon{width:64px;height:64px;border-radius:18px;background:var(--primary-gradient);display:flex;align-items:center;justify-content:center;box-shadow:0 8px 24px var(--primary-glow-light)}
+.welcome-logo-icon svg{width:32px;height:32px;color:#fff}
+.welcome-actions{display:flex;flex-direction:column;gap:12px;align-items:center}
+.welcome-btn{padding:13px 28px;border-radius:var(--rs);font-size:14px;font-weight:500;cursor:pointer;border:none;transition:all .25s var(--ease);width:280px}
+.welcome-btn-primary{background:var(--primary-gradient);color:#fff;box-shadow:0 4px 14px var(--primary-glow)}
+.welcome-btn-primary:hover{transform:translateY(-2px);box-shadow:0 6px 20px var(--primary-glow-strong)}
+.welcome-btn-secondary{background:var(--card);color:var(--text);border:1.5px solid var(--border)}
+.welcome-btn-secondary:hover{border-color:var(--primary);color:var(--primary)}
+.welcome-divider{color:var(--text3);font-size:12px;margin:4px 0}
+.file-list{text-align:left;margin:12px 0;max-height:200px;overflow-y:auto}
+.file-list-item{display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--rs);margin-bottom:6px;cursor:pointer;transition:all .15s;font-size:13px}
+.file-list-item:hover{border-color:var(--primary);background:var(--primary-light)}
+.file-list-item .fli-icon{font-size:16px}
+.file-list-item .fli-name{flex:1;font-weight:500}
+.file-list-item .fli-size{color:var(--text3);font-size:12px}
+.welcome-back{margin-top:16px;font-size:12px;color:var(--text3)}
+.welcome-back a{color:var(--primary);cursor:pointer;text-decoration:underline}
+.no-fsa-warning{background:var(--p1bg);color:var(--p1);padding:10px 14px;border-radius:var(--rs);font-size:12px;margin-top:16px;text-align:left;line-height:1.5}
+/* 文件名显示（状态栏） */
+.current-file{display:flex;align-items:center;gap:4px;cursor:pointer;font-size:11px;color:var(--primary);padding:2px 8px;border-radius:10px;background:var(--primary-light);transition:all .15s}
+.current-file:hover{background:var(--primary);color:#fff}
+</style>
+<link rel="stylesheet" href="topotash-todo.css">
+</head>
+<body>
+
+<!-- ========================================================================
+     HTML 骨架
+     结构: topbar → sidebar + main-area(task-panel + detail-panel) → statusbar
+     sidebar/taskPanel/detailPanel/statusbar 内容由 JS 动态渲染
+     ======================================================================== -->
+<div class="app">
+  <!-- v2: 顶栏已移除，导航/搜索/操作全部整合进侧栏 sidebar-header -->
+  <aside class="sidebar" id="sidebar"></aside>
+
+  <div class="main-area">
+    <div class="task-panel" id="taskPanel"></div>
+    <div class="detail-panel collapsed" id="detailPanel"></div>
+    <!-- AI 聊天面板 -->
+    <div class="ai-panel" id="aiPanel">
+      <div class="ai-resize-handle" id="aiResizeHandle"></div>
+      <div class="ai-hd">
+        <span class="ai-hd-dot" id="aiStatusDot"></span>
+        <span class="ai-hd-title">AI 助手</span>
+        <button class="icon-btn" title="设置 API" onclick="showSettings()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9"/></svg></button>
+        <button class="icon-btn" onclick="toggleAI()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+      </div>
+      <div class="ai-msgs" id="aiMsgs">
+        <div class="ai-empty" id="aiEmpty">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="40" height="40"><path d="M12 2a2 2 0 012 2v1h3a2 2 0 012 2v3h1a2 2 0 012 2v0a2 2 0 01-2 2h-1v3a2 2 0 01-2 2h-3v1a2 2 0 01-2 2v0a2 2 0 01-2-2v-1H7a2 2 0 01-2-2v-3H4a2 2 0 01-2-2v0a2 2 0 012-2h1V7a2 2 0 012-2h3V4a2 2 0 012-2z"/><circle cx="9" cy="10" r="1.5" fill="currentColor" stroke="none"/><circle cx="15" cy="10" r="1.5" fill="currentColor" stroke="none"/><path d="M9 15c.83.67 2 1 3 1s2.17-.33 3-1"/></svg>
+          <p>你好，我是你的 AI 助手</p>
+          <small>可以帮你管理待办事项、规划任务、拆解子任务、总结回顾</small>
+        </div>
+      </div>
+      <div class="ai-typing" id="aiTyping"><span></span><span></span><span></span></div>
+      <div class="ai-quick">
+        <button class="ai-quick-btn" onclick="aiQuick('帮我看看今天的任务安排，列出需要优先处理的事项')">今日安排</button>
+        <button class="ai-quick-btn" onclick="aiQuick('帮我总结一下本周的任务完成情况')">本周总结</button>
+        <button class="ai-quick-btn" onclick="aiQuick('帮我整理一下任务：把没有归类和标签的任务自动分配到合适的项目和标签下')">快速整理</button>
+        <button class="ai-quick-btn" onclick="aiQuick('帮我看看明天有哪些任务到期，提前做好规划')">明日预览</button>
+      </div>
+      <div class="ai-input-area">
+        <textarea class="ai-input" id="aiInput" rows="1" placeholder="输入指令或对话… Enter 发送，Shift+Enter 换行"></textarea>
+        <button class="ai-send" id="aiSendBtn" onclick="aiSend()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4 20-7z"/></svg></button>
+      </div>
+    </div>
+  </div>
+
+  <footer class="statusbar" id="statusbar"></footer>
+</div>
+
+<!-- 模态弹窗容器（添加项目等） -->
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal" id="modalContent"></div>
+</div>
+<!-- Toast 提示容器 -->
+<div class="toast-container" id="toastContainer"></div>
+<!-- 隐藏的文件选择器（导入 JSON 用） -->
+<input type="file" accept=".json" class="hidden" id="fileInput" onchange="handleFileImport(event)">
+
+<!-- 欢迎屏 / 文件选择 -->
+<div class="welcome-overlay" id="welcomeOverlay">
+  <div class="welcome-card" id="welcomeCard">
+    <div class="welcome-logo"><div class="welcome-logo-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 13l4 4L19 7"/></svg></div></div>
+    <h2>欢迎使用 TopoTash 任务台</h2>
+    <p id="welcomeDesc">数据保存在本地 JSON 文件中，不依赖浏览器缓存，换浏览器也不丢数据。</p>
+    <div id="welcomeContent">
+      <div class="welcome-actions">
+        <button class="welcome-btn welcome-btn-primary" onclick="welcomeOpenFile()">📂 打开已有数据文件</button>
+        <button class="welcome-btn welcome-btn-secondary" onclick="welcomeCreateFile()">✨ 创建新数据文件</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ============================================================================
+   ██  工具函数
+   通用辅助函数，不涉及业务逻辑
+   ============================================================================ */
+
+/**
+ * 生成简易唯一 ID（12位十六进制）
+ * 用于任务、子任务、项目的唯一标识
+ * 注意：非标准 UUID，碰撞概率极低但非零，适合个人应用
+ */
+function uuid(){return 'xxxx-xxxx-xxxx'.replace(/x/g,()=>(Math.random()*16|0).toString(16))}
+
+/** 返回当前时间的 ISO 8601 字符串 */
+function now(){return new Date().toISOString()}
+
+/**
+ * 日期格式化 — 智能展示
+ * 今天 → "今天 14:30"  明天 → "明天 14:30"  其他 → "6/10 14:30"
+ */
+function fmtDate(iso){
+  if(!iso)return'';
+  const d=new Date(iso),t=new Date();
+  const day=d.getDate(),mon=d.getMonth()+1,hr=d.getHours(),mn=String(d.getMinutes()).padStart(2,'0');
+  if(d.toDateString()===t.toDateString())return`今天 ${hr}:${mn}`;
+  const tom=new Date(t);tom.setDate(tom.getDate()+1);
+  if(d.toDateString()===tom.toDateString())return`明天 ${hr}:${mn}`;
+  return`${mon}/${day} ${hr}:${mn}`;
+}
+
+/** 判断日期是否已过期 */
+function isOverdue(iso){if(!iso)return false;return new Date(iso)<new Date()}
+/** 判断日期是否是今天 */
+function isToday(iso){if(!iso)return false;return new Date(iso).toDateString()===new Date().toDateString()}
+/** 判断日期是否在未来7天内 */
+function isUpcoming(iso){if(!iso)return false;const d=new Date(iso),t=new Date();t.setHours(23,59,59);const w=new Date(t);w.setDate(w.getDate()+7);return d>=new Date()&&d<=w}
+
+/** 循环任务类型标签映射 */
+const RECUR_LABELS={daily:'每天',weekly:'每周',monthly:'每月',quarterly:'每季度',yearly:'每年'};
+const WEEKDAY_NAMES=['日','一','二','三','四','五','六'];
+const RECUR_WEEKDAY_OPTS=Array.from({length:7},(_,i)=>({v:i,l:`周${WEEKDAY_NAMES[i]}`}));
+const RECUR_MONTHDAY_OPTS=Array.from({length:31},(_,i)=>({v:i+1,l:`${i+1}日`}));
+
+/**
+ * 计算循环任务的下一次截止日期
+ * 基于当前截止日期计算；若已过期或无日期，则从今天开始计算
+ * recurDay: weekly=周日(0)~周六(6), monthly/quarterly=日(1~31)
+ */
+function computeNextDueDate(currentDue, recurType, recurDay){
+  const base = currentDue ? new Date(currentDue) : new Date();
+  if(base < new Date()) base.setTime(Date.now());
+  const y=base.getFullYear(), m=base.getMonth(), d=base.getDate(), h=base.getHours(), mn=base.getMinutes();
+  switch(recurType){
+    case 'daily':   base.setDate(d+1); break;
+    case 'weekly':  {
+      base.setDate(d+7);
+      if(recurDay!==undefined && recurDay!==null){
+        const cur=base.getDay();
+        const diff=((recurDay-cur)%7+7)%7;
+        base.setDate(base.getDate()+diff);
+      }
+      break;
+    }
+    case 'monthly': {
+      const target = (recurDay!==undefined && recurDay!==null) ? recurDay : d;
+      const nm = m+1;
+      base.setMonth(nm); base.setDate(1);
+      const maxDay = new Date(y, nm+1, 0).getDate();
+      base.setDate(Math.min(target, maxDay));
+      break;
+    }
+    case 'quarterly': {
+      const target = (recurDay!==undefined && recurDay!==null) ? recurDay : d;
+      const nm = m+3;
+      base.setMonth(nm); base.setDate(1);
+      const maxDay = new Date(y, nm+1, 0).getDate();
+      base.setDate(Math.min(target, maxDay));
+      break;
+    }
+    case 'yearly': {
+      const target = d;
+      base.setFullYear(y+1); base.setDate(1);
+      const maxDay = new Date(y+1, m+1, 0).getDate();
+      base.setDate(Math.min(target, maxDay));
+      break;
+    }
+  }
+  base.setHours(h, mn, 0, 0);
+  return base.toISOString();
+}
+
+/**
+ * HTML 转义 — 防止 XSS
+ * 同时转义单引号（用于 onclick 属性中的字符串拼接）
+ */
+function escHtml(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML.replace(/'/g,'&#39;')}
+
+/** 显示右上角 Toast 提示，2.5秒自动消失 */
+function toast(msg){
+  const c=document.getElementById('toastContainer');
+  const t=document.createElement('div');t.className='toast';t.textContent=msg;
+  c.appendChild(t);setTimeout(()=>t.remove(),2500);
+}
+
+/* ============================================================================
+   ██  数据层 (Store)
+   数据存储在本地 JSON 文件中（通过 File System Access API）
+   文件句柄缓存在 IndexedDB 中，实现重新打开时自动加载
+   不支持 FSA 的浏览器回退到 localStorage
+   ============================================================================ */
+
+const STORAGE_KEY='todo_app_data';  // localStorage 回退键名
+const IDB_NAME='TodoFileHandles';   // IndexedDB 数据库名
+const IDB_STORE='handles';         // IndexedDB 对象仓库名
+const CURRENT_FILE_KEY='currentFile'; // IndexedDB 中当前文件的键名
+
+/** 当前文件句柄和文件名 */
+let currentFileHandle = null;
+let currentFileName = '';
+
+/**
+ * 检查浏览器是否支持 File System Access API
+ * showOpenFilePicker 仅在 Chrome 86+/Edge 86+/Opera 72+ 可用，Firefox/Safari 不支持。
+ * 同时检查 isSecureContext：某些浏览器在非安全上下文中虽定义了 API 但调用会失败。
+ */
+const hasFSA = !!(window.showOpenFilePicker && window.showSaveFilePicker && window.isSecureContext);
+console.log('[启动] FSA 可用:', hasFSA, '| 安全上下文:', window.isSecureContext, '| UA:', navigator.userAgent);
+
+/* ---------- IndexedDB 辅助（存储文件句柄） ---------- */
+function openIDB(){
+  return new Promise((resolve,reject)=>{
+    const req=indexedDB.open(IDB_NAME,1);
+    req.onupgradeneeded=()=>req.result.createObjectStore(IDB_STORE);
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error);
+  });
+}
+async function idbSet(key,val){
+  const db=await openIDB();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(IDB_STORE,'readwrite');
+    tx.objectStore(IDB_STORE).put(val,key);
+    tx.oncomplete=()=>resolve();
+    tx.onerror=()=>reject(tx.error);
+  });
+}
+async function idbGet(key){
+  const db=await openIDB();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(IDB_STORE,'readonly');
+    const req=tx.objectStore(IDB_STORE).get(key);
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error);
+  });
+}
+async function idbDel(key){
+  const db=await openIDB();
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(IDB_STORE,'readwrite');
+    tx.objectStore(IDB_STORE).delete(key);
+    tx.oncomplete=()=>resolve();
+    tx.onerror=()=>reject(tx.error);
+  });
+}
+
+/**
+ * 全局数据对象
+ * 结构扩展：在原有基础上增加 aiConfig 和 aiChatHistory
+ *
+ * {
+ *   version, lastModified,
+ *   projects, tags, tasks,      — 原有字段
+ *   aiConfig: { apiBase, apiKey, model, temperature, systemPrompt },
+ *   aiChatHistory: []           — AI 对话历史（持久化）
+ * }
+ */
+let store = createEmptyStore();
+
+/** 创建空的 store 结构 */
+function createEmptyStore(){
+  return {
+    version:'2.0', lastModified:now(),
+    projects:[
+      {id:'proj_personal',name:'个人日常',color:'#6366f1',createdAt:now()},
+      {id:'proj_work',name:'工作项目',color:'#f59e0b',createdAt:now()},
+      {id:'proj_learn',name:'学习计划',color:'#10b981',createdAt:now()}
+    ],
+    tags:['设计','开发','会议','文档','紧急','学习'],
+    tasks:[],
+    aiConfig: { apiBase:'', apiKey:'', model:'', temperature:0.7, systemPrompt:'' },
+    aiChatHistory: []
+  };
+}
+
+/** 生成示例数据（首次使用时调用） */
+function seedDemoData(){
+  const today=new Date();const todayISO=today.toISOString();
+  const tom=new Date(today);tom.setDate(tom.getDate()+1);
+  const fri=new Date(today);fri.setDate(fri.getDate()+(5-today.getDay()||7));
+  store.tasks=[
+    {id:uuid(),title:'完成产品需求文档 v2.0',description:'包含用户故事、功能需求、技术架构三个章节。',priority:0,status:'todo',dueDate:todayISO,recur:null,recurDay:null,projectId:'proj_work',tags:['文档','设计'],subtasks:[{id:uuid(),title:'用户故事梳理',completed:true},{id:uuid(),title:'功能需求列表',completed:true},{id:uuid(),title:'技术架构设计',completed:false}],order:0,createdAt:now(),updatedAt:now()},
+    {id:uuid(),title:'Review 前端组件库 PR #42',description:'检查代码质量和组件 API 设计',priority:1,status:'doing',dueDate:tom.toISOString(),recur:null,recurDay:null,projectId:'proj_work',tags:['开发'],subtasks:[],order:1,createdAt:now(),updatedAt:now()},
+    {id:uuid(),title:'准备周会 PPT — 本周进度汇报',description:'',priority:1,status:'todo',dueDate:fri.toISOString(),recur:'weekly',recurDay:5,projectId:'proj_work',tags:['会议'],subtasks:[{id:uuid(),title:'收集各组进度',completed:true},{id:uuid(),title:'制作 PPT',completed:false},{id:uuid(),title:'预演排练',completed:false}],order:2,createdAt:now(),updatedAt:now()},
+    {id:uuid(),title:'整理学习笔记：React 性能优化',description:'React.memo, useMemo, useCallback 使用场景',priority:2,status:'todo',dueDate:fri.toISOString(),recur:null,recurDay:null,projectId:'proj_learn',tags:['学习','开发'],subtasks:[],order:3,createdAt:now(),updatedAt:now()},
+    {id:uuid(),title:'清理桌面文件和下载文件夹',description:'',priority:3,status:'todo',dueDate:null,recur:'monthly',recurDay:1,projectId:'proj_personal',tags:[],subtasks:[],order:4,createdAt:now(),updatedAt:now()},
+    {id:uuid(),title:'更新个人博客文章',description:'发布上一篇关于 CSS Grid 的文章',priority:2,status:'done',dueDate:null,recur:null,recurDay:null,projectId:'proj_personal',tags:[],subtasks:[],order:5,createdAt:now(),updatedAt:now()}
+  ];
+}
+
+/** 确保 store 有 AI 相关字段（兼容旧数据） */
+function ensureAIFields(){
+  if(!store.aiConfig) store.aiConfig={apiBase:'',apiKey:'',model:'',temperature:0.7,systemPrompt:''};
+  if(!store.aiChatHistory) store.aiChatHistory=[];
+  if(!store.projects) store.projects=[];
+  if(!store.tags) store.tags=[];
+  if(!store.tasks) store.tasks=[];
+  // 兼容旧数据：为缺少 recur/recurDay 字段的任务补上默认值
+  store.tasks.forEach(t => { if(t.recur === undefined) t.recur = null; if(t.recurDay === undefined) t.recurDay = null; if(t.stage === undefined) t.stage = 'research'; });
+}
+
+/* ---------- 文件读写（File System Access API） ---------- */
+
+/** 从文件句柄读取 JSON */
+async function readFromFile(handle){
+  const file = await handle.getFile();
+  const text = await file.text();
+  try { return JSON.parse(text); }
+  catch { return null; }
+}
+
+/** 将 store 写入文件 */
+async function writeToFile(handle){
+  store.lastModified = now();
+  const writable = await handle.createWritable();
+  await writable.write(JSON.stringify(store, null, 2));
+  await writable.close();
+}
+
+/** 防抖自动保存（500ms） */
+let saveTimer = null;
+function debouncedSave(){
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(()=>saveStore(), 500);
+}
+
+/**
+ * 保存数据 — 优先写入文件，回退 localStorage
+ * 所有数据修改后调用此函数
+ */
+function saveStore(){
+  store.lastModified = now();
+  if(currentFileHandle){
+    writeToFile(currentFileHandle).catch(e=>{
+      console.warn('文件写入失败，回退 localStorage',e);
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+    });
+  } else {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
+  }
+  updateFileIndicator();
+}
+
+/** 更新状态栏的文件名显示 */
+function updateFileIndicator(){
+  const el = document.getElementById('currentFileName');
+  if(el) el.textContent = currentFileName || 'localStorage';
+}
+
+/* ---------- 欢迎屏 / 文件选择逻辑 ---------- */
+
+/** 显示欢迎屏 */
+function showWelcome(){
+  document.getElementById('welcomeOverlay').classList.remove('hidden');
+  // 确保按钮被渲染
+  const wc = document.getElementById('welcomeContent');
+  if(wc && wc.innerHTML.trim() === '') {
+    renderWelcomeMain();
+  }
+}
+function hideWelcome(){
+  document.getElementById('welcomeOverlay').classList.add('hidden');
+}
+
+/** 欢迎屏：初始界面 */
+function renderWelcomeMain(){
+  const wc = document.getElementById('welcomeContent');
+  let html = `<div class="welcome-actions">
+    <button class="welcome-btn welcome-btn-primary" onclick="welcomeOpenFile()">📂 打开已有数据文件</button>
+    <button class="welcome-btn welcome-btn-secondary" onclick="welcomeCreateFile()">✨ 创建新数据文件</button>`;
+  // 检查 localStorage 中是否有旧数据
+  const oldData = localStorage.getItem(STORAGE_KEY);
+  if(oldData){
+    html += `<div class="welcome-back">检测到浏览器缓存中有旧数据 — <a onclick="welcomeLoadCache()">从缓存恢复</a></div>`;
+  }
+  if(!hasFSA){
+    html += `<div class="no-fsa-warning" style="margin-top:16px;padding:12px 16px;background:var(--no-fsa-bg);border:1px solid var(--no-fsa-border);border-radius:8px;font-size:13px;line-height:1.6;color:var(--no-fsa-color)">
+      <b>⚠️ 文件存储 API 不可用</b><br>
+      当前浏览器或打开方式（file:// 协议）不支持文件访问 API。<br>
+      点击下方按钮将使用<b>浏览器缓存模式</b>（清除缓存会丢数据）。<br><br>
+      <b>启用文件存储模式：</b>用 Chrome/Edge 浏览器，在该文件目录下运行终端：<br>
+      <code style="background:var(--code-inline-bg);padding:2px 6px;border-radius:4px">python -m http.server 8080</code><br>
+      然后访问 <code style="background:var(--code-inline-bg);padding:2px 6px;border-radius:4px">http://localhost:8080</code>
+    </div>`;
+  }
+  html += `</div>`;
+  wc.innerHTML = html;
+}
+
+/** 欢迎屏：打开已有文件 */
+async function welcomeOpenFile(){
+  console.log('[welcomeOpenFile] 被调用, hasFSA:', hasFSA);
+  if(!hasFSA){
+    // 回退：使用传统 file input
+    console.log('[welcomeOpenFile] FSA 不可用，使用 file input 回退');
+    const fi = document.getElementById('fileInput');
+    fi.accept = '.json';
+    fi.onchange = function(ev){
+      const file = ev.target.files[0];
+      if(!file) return;
+      const reader = new FileReader();
+      reader.onload = function(e){
+        try {
+          const data = JSON.parse(e.target.result);
+          if(!data || !data.tasks){ toast('文件格式不正确，请选择待办清单的 JSON 文件'); return; }
+          store = data;
+          ensureAIFields();
+          currentFileName = file.name;
+          hideWelcome();
+          renderAll();
+          updateAIStatus();
+          updateFileIndicator();
+          toast(`已加载 ${store.tasks.length} 个任务（${currentFileName}）⚠️ 缓存模式：关闭页面前请导出备份`);
+        } catch(err){ toast('文件解析失败：' + err.message); }
+      };
+      reader.readAsText(file);
+    };
+    fi.click();
+    return;
+  }
+  try {
+    const [handle] = await window.showOpenFilePicker({
+      types: [{ description: '待办清单数据文件', accept: { 'application/json': ['.json'] } }],
+      multiple: false
+    });
+    const data = await readFromFile(handle);
+    if(!data || !data.tasks){
+      toast('文件格式不正确，请选择待办清单的 JSON 文件');
+      return;
+    }
+    store = data;
+    ensureAIFields();
+    currentFileHandle = handle;
+    currentFileName = handle.name;
+    await idbSet(CURRENT_FILE_KEY, handle);
+    hideWelcome();
+    renderAll();
+    updateAIStatus();
+    updateFileIndicator();
+    toast(`已加载 ${store.tasks.length} 个任务（${currentFileName}）`);
+  } catch(e){
+    console.error('[welcomeOpenFile] 失败:', e);
+    if(e.name !== 'AbortError') toast('打开文件失败：' + e.message);
+  }
+}
+
+/** 欢迎屏：创建新文件 */
+async function welcomeCreateFile(){
+  console.log('[welcomeCreateFile] 被调用, hasFSA:', hasFSA);
+  if(!hasFSA){
+    // 回退：直接用 localStorage
+    console.log('[welcomeCreateFile] FSA 不可用，使用 localStorage 回退');
+    store = createEmptyStore();
+    seedDemoData();
+    saveStore();
+    currentFileName = '本地缓存模式';
+    hideWelcome();
+    renderAll();
+    updateAIStatus();
+    updateFileIndicator();
+    toast('已使用浏览器缓存模式启动 ⚠️ 建议通过 HTTP 服务打开以启用文件存储模式');
+    return;
+  }
+  try {
+    const handle = await window.showSaveFilePicker({
+      types: [{ description: '待办清单数据文件', accept: { 'application/json': ['.json'] } }],
+      suggestedName: 'todos.json'
+    });
+    store = createEmptyStore();
+    seedDemoData();
+    currentFileHandle = handle;
+    currentFileName = handle.name;
+    await writeToFile(handle);
+    await idbSet(CURRENT_FILE_KEY, handle);
+    hideWelcome();
+    renderAll();
+    updateAIStatus();
+    updateFileIndicator();
+    toast(`已创建 ${currentFileName}，含示例数据`);
+  } catch(e){
+    console.error('[welcomeCreateFile] 失败:', e);
+    if(e.name !== 'AbortError') toast('创建文件失败：' + e.message);
+  }
+}
+
+/** 欢迎屏：从 localStorage 缓存恢复 */
+function welcomeLoadCache(){
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if(!raw){ toast('缓存中没有数据'); return; }
+  try {
+    store = JSON.parse(raw);
+    ensureAIFields();
+    saveStore();
+    hideWelcome();
+    renderAll();
+    updateAIStatus();
+    updateFileIndicator();
+    toast('已从浏览器缓存恢复数据');
+  } catch(e){ toast('缓存数据解析失败'); }
+}
+
+/** 切换数据文件（状态栏文件名点击触发） */
+async function switchDataFile(){
+  if(!hasFSA){ toast('当前浏览器不支持文件切换，请使用导出功能备份数据'); return; }
+  if(confirm('切换到其他数据文件？当前数据已自动保存。')){
+    await idbDel(CURRENT_FILE_KEY);
+    currentFileHandle = null;
+    currentFileName = '';
+    renderWelcomeMain();
+    showWelcome();
+  }
+}
+
+/* ---------- 应用启动 ---------- */
+
+/**
+ * 启动流程：
+ * 1. 检查 IndexedDB 中是否有缓存的文件句柄
+ * 2. 有 → 尝试请求权限并加载
+ * 3. 没有 → 显示欢迎屏让用户选择
+ */
+async function bootApp(){
+  if(!hasFSA){
+    // 不支持 FSA → localStorage 模式
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(raw){ try{store=JSON.parse(raw)}catch(e){} ensureAIFields(); }
+    else { store=createEmptyStore(); seedDemoData(); saveStore(); }
+    hideWelcome();
+    renderAll();
+    updateAIStatus();
+    updateFileIndicator();
+    return;
+  }
+
+  // 尝试从 IndexedDB 恢复文件句柄
+  try {
+    const handle = await idbGet(CURRENT_FILE_KEY);
+    if(handle){
+      // 请求读取权限
+      const perm = await handle.queryPermission({mode:'readwrite'});
+      if(perm === 'granted'){
+        const data = await readFromFile(handle);
+        if(data && data.tasks){
+          store = data;
+          ensureAIFields();
+          currentFileHandle = handle;
+          currentFileName = handle.name;
+          hideWelcome();
+          renderAll();
+          updateAIStatus();
+          updateFileIndicator();
+          return;
+        }
+      }
+      if(perm === 'prompt'){
+        // 需要用户授权 — 显示提示让用户点击恢复
+        currentFileHandle = handle;
+        currentFileName = handle.name;
+        document.getElementById('welcomeDesc').textContent = `检测到上次使用的文件「${handle.name}」，点击下方按钮重新授权访问。`;
+        const wc = document.getElementById('welcomeContent');
+        wc.innerHTML = `<div class="welcome-actions">
+          <button class="welcome-btn welcome-btn-primary" onclick="welcomeReauth()">🔓 重新授权「${escHtml(handle.name)}」</button>
+          <button class="welcome-btn welcome-btn-secondary" onclick="welcomeOpenFile()">📂 选择其他文件</button>
+          <button class="welcome-btn welcome-btn-secondary" onclick="welcomeCreateFile()">✨ 创建新文件</button>
+        </div>`;
+        showWelcome();
+        return;
+      }
+      // denied → 清除旧句柄，显示欢迎屏
+      await idbDel(CURRENT_FILE_KEY);
+    }
+  } catch(e){ console.warn('恢复文件句柄失败',e); }
+
+  // 没有缓存句柄或出错 → 显示欢迎屏
+  try {
+    renderWelcomeMain();
+    showWelcome();
+  } catch(e) {
+    console.error('渲染欢迎屏失败:', e);
+    // 兜底：直接显示按钮
+    const wc = document.getElementById('welcomeContent');
+    if(wc) {
+      wc.innerHTML = `<div class="welcome-actions">
+        <button class="welcome-btn welcome-btn-primary" onclick="welcomeOpenFile()">📂 打开已有数据文件</button>
+        <button class="welcome-btn welcome-btn-secondary" onclick="welcomeCreateFile()">✨ 创建新数据文件</button>
+      </div>`;
+    }
+  }
+}
+
+/** 重新授权已有文件句柄 */
+async function welcomeReauth(){
+  if(!currentFileHandle) return;
+  try {
+    const perm = await currentFileHandle.requestPermission({mode:'readwrite'});
+    if(perm === 'granted'){
+      const data = await readFromFile(currentFileHandle);
+      if(data && data.tasks){
+        store = data;
+        ensureAIFields();
+        currentFileName = currentFileHandle.name;
+        await idbSet(CURRENT_FILE_KEY, currentFileHandle);
+        hideWelcome();
+        renderAll();
+        updateAIStatus();
+        updateFileIndicator();
+        toast(`已加载 ${store.tasks.length} 个任务`);
+        return;
+      }
+    }
+    toast('授权失败或被拒绝');
+  } catch(e){ toast('授权失败：'+e.message); }
+}
+
+/* ============================================================================
+   ██  全局 UI 状态
+   控制当前视图、筛选条件、选中任务等
+   修改后调用 renderAll() 刷新界面
+   ============================================================================ */
+let currentView='list';             // 当前视图: 'list' 列表 | 'kanban' 看板
+let currentFilter='today';          // 侧边栏选中: 'today'|'upcoming'|'completed'|'all'|'proj_xxx'
+let currentTagFilters=new Set();    // 标签筛选（多选）
+let currentPriorityFilter=null;     // 优先级筛选: null=全部, 0-3
+let currentStatusFilter=null;       // 状态筛选: null=全部, 'todo'|'doing'|'done'
+let selectedTaskId=null;            // 当前选中的任务 ID（展开详情面板）
+let searchQuery='';                 // 搜索关键词
+let qaPriority=2;                   // 快速添加默认优先级
+
+/* ============================================================================
+   ██  主题管理（深色/浅色模式）
+   - 主题偏好保存在 localStorage
+   - 默认跟随系统 prefers-color-scheme
+   - 通过 html.dark 类切换 CSS 变量
+   ============================================================================ */
+const THEME_KEY='todoflow_theme'; // localStorage 键名
+
+/** 初始化主题（在页面加载时立即调用） */
+function initTheme(){
+  const saved = localStorage.getItem(THEME_KEY);
+  if(saved === 'dark'){
+    document.documentElement.classList.add('dark');
+  } else if(saved === 'light'){
+    document.documentElement.classList.remove('dark');
+  } else {
+    // 跟随系统
+    if(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches){
+      document.documentElement.classList.add('dark');
+    }
+  }
+}
+
+/** 判断当前是否为深色模式 */
+function isDarkMode(){
+  return document.documentElement.classList.contains('dark');
+}
+
+/** 切换深色/浅色模式 */
+function toggleTheme(){
+  const html = document.documentElement;
+  const isDark = html.classList.toggle('dark');
+  localStorage.setItem(THEME_KEY, isDark ? 'dark' : 'light');
+  // 刷新侧栏以更新主题按钮图标
+  renderAll();
+}
+
+/** 获取当前主题的图标标签（太阳/月亮） */
+function themeIcon(){
+  return isDarkMode()
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg>';
+}
+
+function themeLabel(){
+  return isDarkMode() ? '浅色' : '深色';
+}
+
+/** 设置弹窗中的主题下拉框变化处理 */
+function onThemeSelectChange(val){
+  if(val === 'system'){
+    localStorage.removeItem(THEME_KEY);
+    const prefer = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+    document.documentElement.classList.toggle('dark', prefer);
+  } else if(val === 'dark'){
+    document.documentElement.classList.add('dark');
+    localStorage.setItem(THEME_KEY, 'dark');
+  } else {
+    document.documentElement.classList.remove('dark');
+    localStorage.setItem(THEME_KEY, 'light');
+  }
+  renderAll();
+}
+
+// 立即初始化主题（在首次渲染前，避免闪烁）
+initTheme();
+
+/* ============================================================================
+   ██  数据筛选
+   根据当前 UI 状态从 store.tasks 中筛选出要显示的任务
+   ============================================================================ */
+
+/**
+ * 获取当前筛选条件下的任务列表
+ * 筛选链: 智能列表 → 标签 → 优先级 → 状态 → 搜索 → 排序
+ * @returns {Array} 筛选后的任务数组
+ */
+function getFilteredTasks(){
+  let tasks=[...store.tasks];
+  // 第一步：智能列表/项目筛选
+  if(currentFilter==='today')tasks=tasks.filter(t=>isToday(t.dueDate)||t.status!=='done'&&isOverdue(t.dueDate));
+  else if(currentFilter==='upcoming')tasks=tasks.filter(t=>t.status!=='done'&&isUpcoming(t.dueDate));
+  else if(currentFilter==='completed')tasks=tasks.filter(t=>t.status==='done');
+  else if(currentFilter!=='all'&&currentFilter.startsWith('proj_'))tasks=tasks.filter(t=>t.projectId===currentFilter);
+  // 第二步：标签筛选（AND 逻辑，所有选中标签都要包含）
+  if(currentTagFilters.size>0)tasks=tasks.filter(t=>t.tags&&[...currentTagFilters].every(tag=>t.tags.includes(tag)));
+  // 第三步：优先级筛选
+  if(currentPriorityFilter!==null)tasks=tasks.filter(t=>t.priority===currentPriorityFilter);
+  // 第四步：状态筛选
+  if(currentStatusFilter)tasks=tasks.filter(t=>t.status===currentStatusFilter);
+  // 第五步：关键词搜索（标题/描述/标签模糊匹配）
+  if(searchQuery){
+    const q=searchQuery.toLowerCase();
+    tasks=tasks.filter(t=>(t.title&&t.title.toLowerCase().includes(q))||(t.description&&t.description.toLowerCase().includes(q))||(t.tags&&t.tags.some(tag=>tag.toLowerCase().includes(q))));
+  }
+  // 最后按 order 排序
+  tasks.sort((a,b)=>a.order-b.order);
+  return tasks;
+}
+
+/* ============================================================================
+   ██  渲染层
+   纯 HTML 字符串拼接 → innerHTML 更新 DOM
+   核心模式：构建 html 字符串 → 赋值给容器.innerHTML → 绑定事件
+   每次状态变化调用 renderAll() 全量重渲染
+   ============================================================================ */
+
+/** 渲染侧边栏（智能列表 + 项目分类 + 标签云） */
+function renderSidebar(){
+  const sb=document.getElementById('sidebar');
+  const countFor=(fn)=>store.tasks.filter(fn).length;
+  const todayC=countFor(t=>isToday(t.dueDate)||(t.status!=='done'&&isOverdue(t.dueDate)));
+  const upC=countFor(t=>t.status!=='done'&&isUpcoming(t.dueDate));
+  const doneC=countFor(t=>t.status==='done');
+
+  let html=`
+  <div class="sidebar-header">
+    <div class="sidebar-logo">
+      <span class="logo-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M5 13l4 4L19 7"/></svg></span>
+      <span class="logo-text">TopoTash · 任务</span>
+    </div>
+    <div class="sidebar-search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      <input type="text" placeholder="搜索任务、标签、备注..." id="searchInput" value="${escHtml(searchQuery)}">
+    </div>
+    <div class="sidebar-toolbar">
+      <button class="tool-btn ${currentView==='list'?'active':''}" onclick="switchView('list')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>列表</button>
+      <button class="tool-btn ${currentView==='kanban'?'active':''}" onclick="switchView('kanban')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="4" rx="1"/><rect x="3" y="14" width="7" height="4" rx="1"/><rect x="14" y="11" width="7" height="7" rx="1"/></svg>看板</button>
+      <button class="tool-btn" onclick="toggleAI()" title="AI 助手"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a2 2 0 012 2v1h3a2 2 0 012 2v3h1a2 2 0 012 2 2 2 0 01-2 2h-1v3a2 2 0 01-2 2h-3v1a2 2 0 01-4 0v-1H7a2 2 0 01-2-2v-3H4a2 2 0 010-4h1V7a2 2 0 012-2h3V4a2 2 0 012-2z"/></svg>AI</button>
+      <button class="tool-btn" onclick="showSettings()" title="设置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4"/></svg></button>
+      <button class="tool-btn" onclick="importJSON()" title="导入"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+      <button class="tool-btn" onclick="exportJSON()" title="导出"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg></button>
+      <button class="tool-btn" onclick="toggleTheme()" title="${themeLabel()}模式">${themeIcon()}</button>
+    </div>
+  </div>
+  <div class="sidebar-divider"></div>
+  <div class="sb-section">
+    <div class="sb-item ${currentFilter==='today'?'active':''}" onclick="setFilter('today')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+      今日 <span class="count">${todayC}</span>
+    </div>
+    <div class="sb-item ${currentFilter==='upcoming'?'active':''}" onclick="setFilter('upcoming')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+      即将到期 <span class="count">${upC}</span>
+    </div>
+    <div class="sb-item ${currentFilter==='completed'?'active':''}" onclick="setFilter('completed')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><path d="M22 4L12 14.01l-3-3"/></svg>
+      已完成 <span class="count">${doneC}</span>
+    </div>
+    <div class="sb-item ${currentFilter==='all'?'active':''}" onclick="setFilter('all')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      全部 <span class="count">${store.tasks.length}</span>
+    </div>
+  </div>
+  <div class="sb-section">
+    <div class="sb-title">项目</div>`;
+  store.projects.forEach(p=>{
+    const c=countFor(t=>t.projectId===p.id);
+    html+=`<div class="sb-item ${currentFilter===p.id?'active':''}" onclick="setFilter('${p.id}')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="${p.color}" stroke-width="2"><circle cx="12" cy="12" r="4" fill="${p.color}"/></svg>
+      ${escHtml(p.name)} <span class="count">${c}</span>
+      <span class="sb-del" onclick="event.stopPropagation();deleteProject('${p.id}')" title="删除项目">×</span>
+    </div>`;
+  });
+  html+=`</div>
+  <div class="add-project" onclick="showAddProjectModal()">+ 添加项目</div>
+  <div class="sb-section" style="margin-top:16px">
+    <div class="sb-title">标签</div>
+    <div class="tag-cloud">
+      <span class="tag-chip ${currentTagFilters.size===0?'active':''}" onclick="clearTagFilters()">全部</span>`;
+  store.tags.forEach(tag=>{
+    html+=`<span class="tag-chip ${currentTagFilters.has(tag)?'active':''}" onclick="toggleTagFilter('${escHtml(tag)}')">${escHtml(tag)}<span class="tag-del" onclick="event.stopPropagation();deleteTag('${escHtml(tag)}')" title="删除标签">×</span></span>`;
+  });
+  html+=`</div></div>`;
+  sb.innerHTML=html;
+  // 绑定搜索事件（搜索框在侧栏中动态渲染）
+  const si=document.getElementById('searchInput');
+  if(si){
+    si.value=searchQuery;
+    si.addEventListener('input',function(){
+      searchQuery=this.value;
+      // 只重渲染任务区域，不重建侧栏（避免失焦）
+      renderTaskPanel();
+    });
+  }
+}
+
+/** 仅重渲染任务面板（搜索时调用，避免重建侧栏导致失焦） */
+function renderTaskPanel(){
+  if(currentView==='kanban') renderKanbanView();
+  else renderListView();
+  renderDetailPanel();
+  renderStatusbar();
+}
+
+/**
+ * 生成单个任务卡片的 HTML
+ * 列表视图中使用，包含复选框、标题、元信息、操作按钮
+ */
+function taskCardHTML(t){
+  const done=t.status==='done';
+  const sel=t.id===selectedTaskId;
+  const subDone=t.subtasks?t.subtasks.filter(s=>s.completed).length:0;
+  const subTotal=t.subtasks?t.subtasks.length:0;
+  const progPct=subTotal?Math.round(subDone/subTotal*100):0;
+  const od=!done&&isOverdue(t.dueDate);
+  let subHtml='';
+  if(subTotal){
+    subHtml=`<div class="card-subs">${(t.subtasks||[]).map(s=>`<div class="card-sub ${s.completed?'cs-done':''}" onclick="event.stopPropagation();toggleSub('${t.id}','${s.id}')">
+      <span class="card-sub-ck ${s.completed?'ck-on':''}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>
+      <span class="card-sub-tt">${escHtml(s.title)}</span>
+    </div>`).join('')}</div>`;
+  }
+  return`<div class="task-card pri-${t.priority} ${done?'done-card':''} ${sel?'selected':''}" data-id="${t.id}" draggable="true"
+    onclick="selectTask('${t.id}')"
+    ondragstart="onDragStart(event,'${t.id}')" ondragend="onDragEnd(event)"
+    ondragover="onDragOver(event)" ondragleave="onDragLeave(event)" ondrop="onDrop(event,'${t.id}')">
+    <div class="drag-h"><span></span><span></span><span></span><span></span></div>
+    <div class="task-check ${done?'checked':''}" onclick="event.stopPropagation();toggleDone('${t.id}')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
+    </div>
+    <div class="task-body">
+      <div class="task-title">${escHtml(t.title)}</div>
+      <div class="task-meta">
+        <span class="pri-badge p${t.priority}">P${t.priority}</span>
+        ${t.recur?`<span class="task-recur">${getRecurDesc(t.recur,t.recurDay)}</span>`:''}
+        ${t.dueDate?`<span class="task-date ${od?'overdue':''}">${od?'⚠ ':'📅 '}${fmtDate(t.dueDate)}</span>`:''}
+        ${(t.tags||[]).slice(0,3).map(tg=>`<span class="task-tag-sm">${escHtml(tg)}</span>`).join('')}
+        ${subTotal?`<span class="sub-prog"><span class="prog-bar"><span class="prog-fill" style="width:${progPct}%"></span></span>${subDone}/${subTotal}</span>`:''}
+      </div>
+      ${subHtml}
+    </div>
+    <div class="task-actions">
+      <button class="task-act-btn del" onclick="event.stopPropagation();deleteTask('${t.id}')" title="删除"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg></button>
+    </div>
+  </div>`;
+}
+
+/** 渲染列表视图 — 按优先级分组展示 */
+function renderListView(){
+  const tasks=getFilteredTasks();
+  const panel=document.getElementById('taskPanel');
+  let titleMap={today:'今日任务',upcoming:'即将到期',completed:'已完成',all:'全部任务'};
+  store.projects.forEach(p=>titleMap[p.id]=p.name);
+  const title=titleMap[currentFilter]||'任务';
+
+  if(tasks.length===0){
+    panel.innerHTML=`<div class="list-header"><h2>${escHtml(title)}</h2>${filterBarHTML()}</div>
+    <div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 12l2 2 4-4"/></svg><p>暂无任务</p><small>在下方输入框快速添加新任务</small></div>${quickAddHTML()}`;
+    bindQuickAdd();return;
+  }
+
+  // 按优先级分组
+  const groups=[[],[],[],[]];
+  tasks.forEach(t=>groups[t.priority].push(t));
+  const gNames=['紧急 · P0','重要 · P1','一般 · P2','低优 · P3'];
+  const gColors=['var(--p0)','var(--p1)','var(--p2)','var(--p3)'];
+
+  let html=`<div class="list-header"><h2>${escHtml(title)} <span style="font-size:14px;font-weight:400;color:var(--text2)">(${tasks.length})</span></h2>${filterBarHTML()}</div><div class="task-scroll" id="taskScroll">`;
+  groups.forEach((g,i)=>{
+    if(g.length===0)return;
+    html+=`<div class="task-group"><div class="task-group-title"><span class="dot" style="background:${gColors[i]}"></span>${gNames[i]}</div>`;
+    g.forEach(t=>html+=taskCardHTML(t));
+    html+=`</div>`;
+  });
+  html+=`</div>${quickAddHTML()}`;
+  panel.innerHTML=html;
+  bindQuickAdd();
+}
+
+/** 生成筛选条 HTML（列表/看板共用） */
+function filterBarHTML(){
+  return`<div class="filter-bar">
+    <span class="filter-chip ${currentStatusFilter===null?'active':''}" onclick="setStatusFilter(null)">全部</span>
+    <span class="filter-chip ${currentStatusFilter==='todo'?'active':''}" onclick="setStatusFilter('todo')">待办</span>
+    <span class="filter-chip ${currentStatusFilter==='doing'?'active':''}" onclick="setStatusFilter('doing')">进行中</span>
+    <span class="filter-chip ${currentPriorityFilter===0?'active':''}" onclick="setPriorityFilter(0)">P0</span>
+  </div>`;
+}
+
+/** 生成快速添加区 HTML */
+function quickAddHTML(){
+  const pris=['p0','p1','p2','p3'];
+  return`<div class="quick-add"><div class="quick-add-inner">
+    <input type="text" placeholder="✏️ 快速添加新任务… 回车确认" id="qaInput">
+    ${[0,1,2,3].map(i=>`<button class="qa-pri ${pris[i]} ${qaPriority===i?'sel':''}" onclick="setQAPriority(${i})" title="P${i}">P${i}</button>`).join('')}
+    <button class="quick-add-btn" onclick="quickAdd()">+</button>
+  </div></div>`;
+}
+
+/** 绑定快速添加输入框的回车事件 */
+function bindQuickAdd(){
+  const inp=document.getElementById('qaInput');
+  if(inp)inp.addEventListener('keydown',e=>{if(e.key==='Enter')quickAdd()});
+}
+
+/** 渲染看板视图 — 按状态分三列（待办/进行中/已完成） */
+function renderKanbanView(){
+  const tasks=getFilteredTasks();
+  const panel=document.getElementById('taskPanel');
+  const cols=[
+    {key:'todo',label:'待办',tasks:[]},
+    {key:'doing',label:'进行中',tasks:[]},
+    {key:'done',label:'已完成',tasks:[]}
+  ];
+  tasks.forEach(t=>{const c=cols.find(c=>c.key===t.status);if(c)c.tasks.push(t)});
+
+  let html=`<div class="list-header"><h2>看板视图 <span style="font-size:14px;font-weight:400;color:var(--text2)">(${tasks.length})</span></h2>${filterBarHTML()}</div>
+  <div class="kanban-board active" id="kanbanBoard">`;
+  cols.forEach(col=>{
+    html+=`<div class="kb-col" data-status="${col.key}" ondragover="onKanbanDragOver(event)" ondragleave="onKanbanDragLeave(event)" ondrop="onKanbanDrop(event,'${col.key}')">
+      <div class="kb-col-hd"><span class="kb-col-title">${col.label}</span><span class="kb-col-cnt">${col.tasks.length}</span></div>
+      <div class="kb-cards">`;
+    col.tasks.forEach(t=>{
+      const done=t.status==='done';const sel=t.id===selectedTaskId;
+      html+=`<div class="kb-card ${done?'kb-done':''} ${sel?'kb-selected':''}" data-id="${t.id}" draggable="true"
+        onclick="selectTask('${t.id}')" ondragstart="onDragStart(event,'${t.id}')" ondragend="onDragEnd(event)">
+        <div class="task-title" style="font-size:13px">${escHtml(t.title)}</div>
+        <div class="task-meta" style="margin-top:6px">
+          <span class="pri-badge p${t.priority}">P${t.priority}</span>
+          ${t.recur?`<span class="task-recur">${getRecurDesc(t.recur,t.recurDay)}</span>`:''}
+          ${t.dueDate?`<span class="task-date" style="font-size:11px">${fmtDate(t.dueDate)}</span>`:''}
+        </div>
+      </div>`;
+    });
+    html+=`</div></div>`;
+  });
+  html+=`</div>${quickAddHTML()}`;
+  panel.innerHTML=html;
+  bindQuickAdd();
+}
+
+/** 渲染右侧详情面板 — 选中任务时展开 */
+function renderDetailPanel(){
+  const dp=document.getElementById('detailPanel');
+  if(!selectedTaskId){dp.classList.add('collapsed');return}
+  const t=store.tasks.find(t=>t.id===selectedTaskId);
+  if(!t){dp.classList.add('collapsed');return}
+  dp.classList.remove('collapsed');
+
+  const subDone=t.subtasks?t.subtasks.filter(s=>s.completed).length:0;
+  const subTotal=t.subtasks?t.subtasks.length:0;
+
+  let html=`<div class="det-hd"><h3>任务详情</h3><button class="icon-btn" onclick="closeDetail()">✕</button></div>
+  <div class="det-body">
+    <div class="det-field"><div class="det-label">任务标题</div>
+      <input class="det-input" value="${escHtml(t.title)}" onchange="updateTask('${t.id}','title',this.value)"></div>
+    <div class="det-field"><div class="det-label">详细描述 / 备注</div>
+      <textarea class="det-textarea" placeholder="添加描述或备注..." onchange="updateTask('${t.id}','description',this.value)">${escHtml(t.description||'')}</textarea></div>
+    <div class="det-field"><div class="det-label">子任务 ${subTotal?`(${subDone}/${subTotal})`:''}</div>
+      <ul class="sub-list">`;
+  (t.subtasks||[]).forEach(s=>{
+    html+=`<li class="sub-item">
+      <div class="sub-check ${s.completed?'sc-done':''}" onclick="toggleSub('${t.id}','${s.id}')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
+      </div>
+      <span class="sub-title ${s.completed?'sub-done':''}">${escHtml(s.title)}</span>
+      <button class="sub-del" onclick="deleteSub('${t.id}','${s.id}')">×</button>
+    </li>`;
+  });
+  html+=`</ul>
+    <div class="add-sub" onclick="showAddSubtask('${t.id}')">+ 添加子任务</div>
+    <div id="subAddArea"></div></div>
+    <div class="det-field"><div class="det-label">优先级</div><div class="pri-select">
+      ${[0,1,2,3].map(i=>`<span class="pri-opt p${i} ${t.priority===i?'sel':''}" onclick="updateTask('${t.id}','priority',${i})">P${i} ${['紧急','重要','一般','低'][i]}</span>`).join('')}
+    </div></div>
+    <div class="det-field"><div class="det-label">状态</div>
+      <select class="det-select" onchange="updateTask('${t.id}','status',this.value)">
+        <option value="todo" ${t.status==='todo'?'selected':''}>待办</option>
+        <option value="doing" ${t.status==='doing'?'selected':''}>🔄 进行中</option>
+        <option value="done" ${t.status==='done'?'selected':''}>✅ 已完成</option>
+      </select></div>
+    <div class="det-field"><div class="det-label">售前阶段</div>
+      <select class="det-select" onchange="updateTask('${t.id}','stage',this.value)">
+        <option value="research" ${(t.stage||'research')==='research'?'selected':''}>需求调研</option>
+        <option value="proposal" ${t.stage==='proposal'?'selected':''}>方案编写</option>
+        <option value="poc" ${t.stage==='poc'?'selected':''}>POC 验证</option>
+        <option value="bidding" ${t.stage==='bidding'?'selected':''}>招投标</option>
+      </select></div>
+    <div class="det-field"><div class="det-label">截止日期</div>
+      <input class="det-input" type="datetime-local" value="${t.dueDate?t.dueDate.slice(0,16):''}" onfocus="if(!this.value){const n=new Date(),p=v=>String(v).padStart(2,'0');this.value=n.getFullYear()+'-'+p(n.getMonth()+1)+'-'+p(n.getDate())+'T'+p(n.getHours())+':'+p(n.getMinutes())}" onchange="updateTask('${t.id}','dueDate',this.value?new Date(this.value).toISOString():null)"></div>
+    <div class="det-field"><div class="det-label">循环周期</div>
+      <select class="det-select" onchange="setRecurType('${t.id}',this.value)">
+        <option value="" ${!t.recur?'selected':''}>不循环</option>
+        <option value="daily" ${t.recur==='daily'?'selected':''}>每天</option>
+        <option value="weekly" ${t.recur==='weekly'?'selected':''}>每周</option>
+        <option value="monthly" ${t.recur==='monthly'?'selected':''}>每月</option>
+        <option value="quarterly" ${t.recur==='quarterly'?'selected':''}>每季度</option>
+        <option value="yearly" ${t.recur==='yearly'?'selected':''}>每年</option>
+      </select>
+      ${t.recur==='weekly'?`<select class="det-select" style="margin-top:6px" onchange="updateTask('${t.id}','recurDay',Number(this.value))">
+        ${RECUR_WEEKDAY_OPTS.map(o=>`<option value="${o.v}" ${t.recurDay===o.v?'selected':''}>${o.l}</option>`).join('')}
+      </select>`:''}
+      ${(t.recur==='monthly'||t.recur==='quarterly')?`<select class="det-select" style="margin-top:6px" onchange="updateTask('${t.id}','recurDay',Number(this.value))">
+        ${RECUR_MONTHDAY_OPTS.map(o=>`<option value="${o.v}" ${t.recurDay===o.v?'selected':''}>${o.l}</option>`).join('')}
+      </select>`:''}
+      ${t.recur?`<div class="recur-info">完成任务后将自动创建下一个周期（${getRecurDesc(t.recur,t.recurDay)}）</div>`:''}
+    </div>
+    <div class="det-field"><div class="det-label">所属项目</div>
+      <select class="det-select" onchange="updateTask('${t.id}','projectId',this.value)">
+        <option value="">无分类</option>
+        ${store.projects.map(p=>`<option value="${p.id}" ${t.projectId===p.id?'selected':''}>${escHtml(p.name)}</option>`).join('')}
+      </select></div>
+    <div class="det-field"><div class="det-label">标签</div><div class="det-tags">
+      ${(t.tags||[]).map(tg=>`<span class="det-tag">${escHtml(tg)} <span class="rm-tag" onclick="removeTaskTag('${t.id}','${escHtml(tg)}')">×</span></span>`).join('')}
+      <div class="tag-picker">
+        <span class="add-tag-btn" onclick="toggleTagPicker(event)">+ 标签</span>
+        <div class="tag-dropdown" id="tagDropdown">
+          ${store.tags.map(tg=>`<div class="tag-dropdown-item" onclick="addTaskTag('${t.id}','${escHtml(tg)}')"><span class="tdi-check ${(t.tags||[]).includes(tg)?'tdi-on':''}">${(t.tags||[]).includes(tg)?'✓':''}</span>${escHtml(tg)}</div>`).join('')}
+          <div class="tag-new-row"><input placeholder="新标签" id="newTagInput" onkeydown="if(event.key==='Enter')addNewTag(event,'${t.id}')"><button onclick="addNewTag(event,'${t.id}')">添加</button></div>
+        </div>
+      </div>
+    </div></div>
+    <div class="det-ts">
+      <span>创建时间：${t.createdAt?new Date(t.createdAt).toLocaleString('zh-CN'):''}</span>
+      <span>修改时间：${t.updatedAt?new Date(t.updatedAt).toLocaleString('zh-CN'):''}</span>
+    </div>
+    <div class="det-danger"><button class="det-del-btn" onclick="deleteTask('${t.id}')">🗑 删除此任务</button></div>
+  </div>`;
+  dp.innerHTML=html;
+}
+
+/** 渲染底部状态栏 — 任务统计 */
+function renderStatusbar(){
+  const all=store.tasks.length;
+  const done=store.tasks.filter(t=>t.status==='done').length;
+  const doing=store.tasks.filter(t=>t.status==='doing').length;
+  const todo=all-done-doing;
+  document.getElementById('statusbar').innerHTML=`
+    <span>总计 <b>${all}</b></span>
+    <span>✅ 已完成 <b>${done}</b></span>
+    <span>🔄 进行中 <b>${doing}</b></span>
+    <span>待办 <b>${todo}</b></span>
+    <span class="current-file" onclick="switchDataFile()" title="点击切换数据文件">📁 ${currentFileName || 'localStorage'}</span>
+    <span style="margin-left:auto;font-size:11px;color:var(--text3)">数据：TopoTash</span>`;
+}
+
+/**
+ * 全量重渲染 — 状态变化后统一调用
+ * 依次刷新：侧边栏 → 主视图（列表或看板）→ 详情面板 → 状态栏
+ */
+function renderAll(){
+  renderSidebar();
+  if(currentView==='list')renderListView();else renderKanbanView();
+  renderDetailPanel();
+  renderStatusbar();
+}
+
+/* ============================================================================
+   ██  动作层 (Actions)
+   用户交互的处理函数
+   模式：修改状态 → saveStore() → renderAll()
+   ============================================================================ */
+
+// --- 筛选操作 ---
+function setFilter(f){currentFilter=f;selectedTaskId=null;renderAll()}
+function setStatusFilter(s){currentStatusFilter=s;renderAll()}
+function setPriorityFilter(p){currentPriorityFilter=currentPriorityFilter===p?null:p;renderAll()}
+function clearTagFilters(){currentTagFilters.clear();renderAll()}
+function toggleTagFilter(tag){currentTagFilters.has(tag)?currentTagFilters.delete(tag):currentTagFilters.add(tag);renderAll()}
+function deleteTag(tag){
+  const cnt=store.tasks.filter(t=>(t.tags||[]).includes(tag)).length;
+  const msg=cnt>0?`删除标签「${tag}」？该标签将从 ${cnt} 个任务中移除。`:`删除标签「${tag}」？`;
+  if(!confirm(msg))return;
+  store.tags=store.tags.filter(t=>t!==tag);
+  store.tasks.forEach(t=>{if(t.tags)t.tags=t.tags.filter(tg=>tg!==tag)});
+  currentTagFilters.delete(tag);
+  saveStore();renderAll();toast('标签已删除');
+}
+
+// --- 视图切换 ---
+function switchView(v){
+  currentView=v;
+  renderAll(); // 侧栏中的视图切换按钮会随 renderAll 重建
+}
+
+// --- 任务选择/详情 ---
+function selectTask(id){selectedTaskId=id;renderAll()}
+function closeDetail(){selectedTaskId=null;renderAll()}
+
+// --- 任务 CRUD ---
+
+/** 切换任务完成状态 */
+function toggleDone(id){
+  const t=store.tasks.find(t=>t.id===id);if(!t)return;
+  if(t.status!=='done' && t.recur){
+    // 循环任务：完成时自动推进截止日期到下一个周期
+    const nextDue = computeNextDueDate(t.dueDate, t.recur, t.recurDay);
+    t.dueDate = nextDue;
+    t.status = 'done';
+    t.updatedAt = now();
+    saveStore();renderAll();
+    toast(`循环任务已完成，下次截止：${fmtDate(nextDue)}`);
+    return;
+  }
+  t.status=t.status==='done'?'todo':'done';t.updatedAt=now();saveStore();renderAll();
+}
+
+/** 删除任务（带确认弹窗） */
+function deleteTask(id){
+  if(!confirm('确定删除此任务？'))return;
+  store.tasks=store.tasks.filter(t=>t.id!==id);
+  if(selectedTaskId===id)selectedTaskId=null;
+  saveStore();renderAll();toast('任务已删除');
+}
+
+/** 设置循环类型并自动计算默认 recurDay */
+function setRecurType(id, type) {
+  const t = store.tasks.find(t => t.id === id);
+  if (!t) return;
+  if (!type) {
+    t.recur = null;
+    t.recurDay = null;
+  } else {
+    t.recur = type;
+    const ref = t.dueDate ? new Date(t.dueDate) : new Date();
+    if (type === 'weekly') {
+      t.recurDay = ref.getDay(); // 0=周日
+    } else if (type === 'monthly' || type === 'quarterly') {
+      t.recurDay = ref.getDate();
+    } else {
+      t.recurDay = null;
+    }
+  }
+  t.updatedAt = now();
+  saveStore();
+  renderAll();
+}
+
+/** 获取循环描述文本 */
+function getRecurDesc(type, day) {
+  if (!type) return '';
+  if (type === 'daily') return '每天';
+  if (type === 'weekly') return day !== null && day !== undefined ? `每周${WEEKDAY_NAMES[day]}` : '每周';
+  if (type === 'monthly') return day !== null && day !== undefined ? `每月${day}日` : '每月';
+  if (type === 'quarterly') return day !== null && day !== undefined ? `每季度${day}日` : '每季度';
+  if (type === 'yearly') return '每年';
+  return type;
+}
+
+/** 更新任务的指定字段 */
+function updateTask(id,field,val){
+  const t=store.tasks.find(t=>t.id===id);if(!t)return;
+  // 循环任务：通过下拉框设为已完成时，也触发日期推进
+  if(field==='status' && val==='done' && t.recur && t.status!=='done'){
+    const nextDue = computeNextDueDate(t.dueDate, t.recur, t.recurDay);
+    t.dueDate = nextDue;
+    toast(`循环任务已完成，下次截止：${fmtDate(nextDue)}`);
+  }
+  t[field]=val;t.updatedAt=now();saveStore();renderAll();
+}
+
+// --- 子任务操作 ---
+function toggleSub(taskId,subId){
+  const t=store.tasks.find(t=>t.id===taskId);if(!t)return;
+  const s=t.subtasks.find(s=>s.id===subId);if(!s)return;
+  s.completed=!s.completed;t.updatedAt=now();saveStore();renderAll();
+}
+function deleteSub(taskId,subId){
+  const t=store.tasks.find(t=>t.id===taskId);if(!t)return;
+  t.subtasks=t.subtasks.filter(s=>s.id!==subId);t.updatedAt=now();saveStore();renderAll();
+}
+function showAddSubtask(taskId){
+  const area=document.getElementById('subAddArea');
+  area.innerHTML=`<div class="sub-add-row"><input placeholder="子任务名称..." id="newSubInput"><button class="sub-add-ok" onclick="addSubtask('${taskId}')">添加</button><button class="sub-add-cancel" onclick="document.getElementById('subAddArea').innerHTML=''">取消</button></div>`;
+  document.getElementById('newSubInput').focus();
+  document.getElementById('newSubInput').addEventListener('keydown',e=>{if(e.key==='Enter')addSubtask(taskId)});
+}
+function addSubtask(taskId){
+  const inp=document.getElementById('newSubInput');if(!inp||!inp.value.trim())return;
+  const t=store.tasks.find(t=>t.id===taskId);if(!t)return;
+  if(!t.subtasks)t.subtasks=[];
+  t.subtasks.push({id:uuid(),title:inp.value.trim(),completed:false});
+  t.updatedAt=now();saveStore();renderAll();
+}
+
+// --- 标签操作 ---
+
+/** 打开/关闭标签选择下拉框 */
+function toggleTagPicker(e){
+  e.stopPropagation();
+  const dd=document.getElementById('tagDropdown');
+  dd.classList.toggle('open');
+  const close=e2=>{if(!dd.contains(e2.target)){dd.classList.remove('open');document.removeEventListener('click',close)}};
+  setTimeout(()=>document.addEventListener('click',close),0);
+}
+function addTaskTag(taskId,tag){
+  const t=store.tasks.find(t=>t.id===taskId);if(!t)return;
+  if(!t.tags)t.tags=[];
+  if(!t.tags.includes(tag))t.tags.push(tag);
+  t.updatedAt=now();saveStore();renderAll();
+}
+function removeTaskTag(taskId,tag){
+  const t=store.tasks.find(t=>t.id===taskId);if(!t)return;
+  t.tags=t.tags.filter(tg=>tg!==tag);t.updatedAt=now();saveStore();renderAll();
+}
+/** 创建新标签并添加到全局标签池 */
+function addNewTag(e,taskId){
+  const inp=document.getElementById('newTagInput');if(!inp||!inp.value.trim())return;
+  const tag=inp.value.trim();
+  if(!store.tags.includes(tag))store.tags.push(tag);
+  if(taskId)addTaskTag(taskId,tag);
+  else{saveStore();renderAll()}
+}
+
+// --- 快速添加 ---
+function setQAPriority(p){qaPriority=p;renderAll()}
+function quickAdd(){
+  const inp=document.getElementById('qaInput');if(!inp||!inp.value.trim())return;
+  // 如果在项目分类下，自动归入该项目
+  const projId=currentFilter.startsWith('proj_')?currentFilter:(store.projects.length?store.projects[0].id:null);
+  const t={id:uuid(),title:inp.value.trim(),description:'',priority:qaPriority,status:'todo',stage:(window.TT_DEFAULT_STAGE||'research'),dueDate:null,recur:null,recurDay:null,projectId:projId,tags:[...currentTagFilters],subtasks:[],order:store.tasks.length,createdAt:now(),updatedAt:now()};
+  store.tasks.push(t);saveStore();renderAll();toast('任务已添加');
+}
+
+// --- 项目管理 ---
+function showAddProjectModal(){
+  const m=document.getElementById('modalContent');
+  m.innerHTML=`<h3>添加项目分类</h3><input placeholder="项目名称..." id="newProjName">
+    <div style="margin-bottom:12px"><label style="font-size:12px;color:var(--text2)">颜色</label><br>
+    <input type="color" value="#6366f1" id="newProjColor" style="width:50px;height:30px;border:none;cursor:pointer"></div>
+    <div class="modal-actions"><button class="btn-cancel" onclick="closeModal()">取消</button><button class="btn-primary" onclick="addProject()">添加</button></div>`;
+  document.getElementById('modalOverlay').classList.add('show');
+  setTimeout(()=>document.getElementById('newProjName').focus(),100);
+  document.getElementById('newProjName').addEventListener('keydown',e=>{if(e.key==='Enter')addProject()});
+}
+function addProject(){
+  const name=document.getElementById('newProjName').value.trim();if(!name)return;
+  const color=document.getElementById('newProjColor').value;
+  store.projects.push({id:'proj_'+uuid(),name,color,createdAt:now()});
+  saveStore();closeModal();renderAll();toast('项目已添加');
+}
+function deleteProject(id){
+  if(!confirm('删除此项目分类？关联任务将变为无分类。'))return;
+  store.projects=store.projects.filter(p=>p.id!==id);
+  store.tasks.forEach(t=>{if(t.projectId===id)t.projectId=null});
+  if(currentFilter===id)currentFilter='all';
+  saveStore();renderAll();toast('项目已删除');
+}
+function closeModal(){document.getElementById('modalOverlay').classList.remove('show')}
+
+/* ============================================================================
+   ██  拖拽排序
+   列表视图：上下拖拽改变顺序（更新 order 字段）
+   看板视图：跨列拖拽改变状态（更新 status 字段）
+   使用 HTML5 原生 Drag and Drop API
+   ============================================================================ */
+let dragId=null; // 当前被拖拽的任务 ID
+
+function onDragStart(e,id){dragId=id;e.dataTransfer.effectAllowed='move';e.target.classList.add('dragging')}
+
+function onDragEnd(e){
+  e.target.classList.remove('dragging');
+  document.querySelectorAll('.drag-over-top,.drag-over-bottom,.drag-over').forEach(el=>el.classList.remove('drag-over-top','drag-over-bottom','drag-over'));
+  dragId=null;
+}
+
+/** 列表视图拖拽悬停 — 计算鼠标在卡片上半部还是下半部 */
+function onDragOver(e){
+  e.preventDefault();e.dataTransfer.dropEffect='move';
+  const card=e.currentTarget;
+  const rect=card.getBoundingClientRect();const mid=rect.top+rect.height/2;
+  card.classList.remove('drag-over-top','drag-over-bottom');
+  card.classList.add(e.clientY<mid?'drag-over-top':'drag-over-bottom');
+}
+
+function onDragLeave(e){e.currentTarget.classList.remove('drag-over-top','drag-over-bottom')}
+
+/** 列表视图拖拽放置 — 重新排序 */
+function onDrop(e,targetId){
+  e.preventDefault();
+  if(!dragId||dragId===targetId)return;
+  const card=e.currentTarget;
+  const rect=card.getBoundingClientRect();const above=e.clientY<rect.top+rect.height/2;
+  card.classList.remove('drag-over-top','drag-over-bottom');
+  const src=store.tasks.find(t=>t.id===dragId);const tgt=store.tasks.find(t=>t.id===targetId);
+  if(!src||!tgt)return;
+  store.tasks=store.tasks.filter(t=>t.id!==dragId);
+  const idx=store.tasks.indexOf(tgt);
+  store.tasks.splice(above?idx:idx+1,0,src);
+  store.tasks.forEach((t,i)=>t.order=i);
+  saveStore();renderAll();
+}
+
+// 看板拖拽 — 改变任务状态
+function onKanbanDragOver(e){e.preventDefault();e.currentTarget.classList.add('drag-over')}
+function onKanbanDragLeave(e){e.currentTarget.classList.remove('drag-over')}
+function onKanbanDrop(e,status){
+  e.preventDefault();e.currentTarget.classList.remove('drag-over');
+  if(!dragId)return;
+  const t=store.tasks.find(t=>t.id===dragId);if(!t)return;
+  t.status=status;t.updatedAt=now();saveStore();renderAll();toast('任务状态已更新');
+}
+
+/* ============================================================================
+   ██  搜索
+   全局搜索框实时过滤（标题/描述/标签）
+   注意：搜索框现在在侧栏中，由 renderSidebar 动态渲染，
+   事件绑定和焦点恢复逻辑在 renderSidebar 末尾处理。
+   ============================================================================ */
+/* 搜索框的事件监听在 renderSidebar 中绑定，这里不再静态绑定 */
+
+/* ============================================================================
+   ██  导入 / 导出
+   JSON 导入：读取文件 → 校验结构 → 覆盖 store
+   JSON 导出：store → JSON.stringify → 下载文件
+   CSV 导出：store → 逗号分隔 → 下载文件（Excel 兼容）
+   ============================================================================ */
+
+function importJSON(){document.getElementById('fileInput').click()}
+
+function handleFileImport(e){
+  const file=e.target.files[0];if(!file)return;
+  if(!confirm(`导入将覆盖当前所有数据（${store.tasks.length} 个任务）。确定继续？`))return;
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    try{
+      const data=JSON.parse(ev.target.result);
+      if(data.tasks&&Array.isArray(data.tasks)){
+        store=data;ensureAIFields();
+        // 校验并修复每个任务的数据结构（兼容不完整的导入数据）
+        store.tasks=store.tasks.map(t=>({
+          id:t.id||uuid(),
+          title:t.title||'未命名任务',
+          description:t.description||'',
+          priority:typeof t.priority==='number'?t.priority:2,
+          status:['todo','doing','done'].includes(t.status)?t.status:'todo',
+          dueDate:t.dueDate||null,
+          recur:['daily','weekly','monthly','quarterly','yearly'].includes(t.recur)?t.recur:null,
+          recurDay:typeof t.recurDay==='number'?t.recurDay:null,
+          projectId:t.projectId||null,
+          tags:Array.isArray(t.tags)?t.tags:[],
+          subtasks:Array.isArray(t.subtasks)?t.subtasks:[],
+          order:typeof t.order==='number'?t.order:0,
+          createdAt:t.createdAt||now(),
+          updatedAt:t.updatedAt||now()
+        }));
+        saveStore();renderAll();toast(`成功导入 ${store.tasks.length} 个任务`);
+      }else{toast('JSON 格式不正确，缺少 tasks 数组')}
+    }catch(err){toast('JSON 解析失败：'+err.message)}
+  };
+  reader.readAsText(file);e.target.value='';
+}
+
+function exportJSON(){
+  const blob=new Blob([JSON.stringify(store,null,2)],{type:'application/json'});
+  downloadBlob(blob,'todos.json');toast('JSON 文件已导出');
+}
+
+/** CSV 字段安全包装 — 所有字段加双引号，内部双引号转义 */
+function csvField(v){return'"'+(v||'').replace(/"/g,'""')+'"'}
+
+function exportCSV(){
+  const pri=['P0 紧急','P1 重要','P2 一般','P3 低'];
+  const stat={todo:'待办',doing:'进行中',done:'已完成'};
+  let csv='\uFEFF标题,优先级,状态,截止日期,项目,标签,描述,子任务\n';
+  store.tasks.forEach(t=>{
+    const proj=store.projects.find(p=>p.id===t.projectId);
+    const subs=(t.subtasks||[]).map(s=>`${s.completed?'✓':'○'} ${s.title}`).join('; ');
+    csv+=[csvField(t.title),csvField(pri[t.priority]||''),csvField(stat[t.status]||''),csvField(t.dueDate||''),csvField(proj?proj.name:''),csvField((t.tags||[]).join('/')),csvField(t.description||''),csvField(subs)].join(',')+'\n';
+  });
+  const blob=new Blob([csv],{type:'text/csv;charset=utf-8'});
+  downloadBlob(blob,'todos.csv');toast('CSV 文件已导出');
+}
+
+/** 通用文件下载 */
+function downloadBlob(blob,name){
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(a.href);
+}
+
+/* ============================================================================
+   ██  AI 助手功能
+   - AI 配置存储与检测
+   - OpenAI 兼容 API 调用（支持流式响应）
+   - 函数调用（Function Calling）让 AI 直接操作待办列表
+   - 快捷指令
+   ============================================================================ */
+
+/**
+ * AI 配置和聊天历史现在存储在数据文件中（store.aiConfig / store.aiChatHistory）
+ * 不再使用独立的 localStorage 键
+ */
+
+/**
+ * 获取 AI 配置（从 store）
+ * @returns {{apiBase:string, apiKey:string, model:string, temperature:number}|null}
+ */
+function getAIConfig() {
+  const cfg = store.aiConfig;
+  if (cfg && cfg.apiBase && cfg.apiKey && cfg.model) return cfg;
+  return null;
+}
+
+/**
+ * 保存 AI 配置到 store（自动写入数据文件）
+ */
+function saveAIConfig(apiBase, apiKey, model, temperature) {
+  store.aiConfig = {
+    apiBase: apiBase.replace(/\/+$/, ''),
+    apiKey, model,
+    temperature: parseFloat(temperature) || 0.7,
+    systemPrompt: (store.aiConfig && store.aiConfig.systemPrompt) || ''
+  };
+  saveStore();
+  updateAIStatus();
+}
+
+/** 更新 AI 状态指示灯 */
+function updateAIStatus() {
+  const dot = document.getElementById('aiStatusDot');
+  if (dot) dot.classList.toggle('connected', !!getAIConfig());
+}
+
+/** 切换 AI 面板显示/隐藏 */
+function toggleAI() {
+  const panel = document.getElementById('aiPanel');
+  const isOpen = panel.classList.toggle('open');
+  if (isOpen) {
+    updateAIStatus();
+    // 如果没配置 API，自动打开设置
+    if (!getAIConfig()) setTimeout(() => showSettings('ai'), 300);
+  }
+}
+
+/** AI 面板拖拽调整宽度 */
+(function initAIResize(){
+  const handle = document.getElementById('aiResizeHandle');
+  const panel = document.getElementById('aiPanel');
+  let dragging = false, startX = 0, startW = 0;
+
+  handle.addEventListener('mousedown', function(e){
+    dragging = true;
+    startX = e.clientX;
+    startW = panel.getBoundingClientRect().width;
+    panel.classList.add('ai-resizing');
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', function(e){
+    if(!dragging) return;
+    const dx = startX - e.clientX;
+    const newW = Math.max(300, Math.min(800, startW + dx));
+    panel.style.width = newW + 'px';
+  });
+
+  document.addEventListener('mouseup', function(){
+    if(!dragging) return;
+    dragging = false;
+    panel.classList.remove('ai-resizing');
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+  });
+})();
+
+/** 显示设置弹窗，可指定默认标签页 */
+function showSettings(tab) {
+  const cfg = getAIConfig() || {};
+  const modal = document.getElementById('modalContent');
+  const activeTab = tab || 'general';
+  modal.innerHTML = `
+    <h3>设置</h3>
+    <div class="settings-tabs">
+      <button class="settings-tab ${activeTab==='general'?'active':''}" onclick="showSettings('general')">通用</button>
+      <button class="settings-tab ${activeTab==='ai'?'active':''}" onclick="showSettings('ai')">AI 助手</button>
+    </div>
+    ${activeTab === 'general' ? `
+      <div class="settings-field">
+        <label>主题</label>
+        <select id="setTheme" onchange="onThemeSelectChange(this.value)">
+          <option value="light" ${localStorage.getItem(THEME_KEY)==='light'?'selected':''}>浅色</option>
+          <option value="dark" ${localStorage.getItem(THEME_KEY)==='dark'?'selected':''}>深色</option>
+          <option value="system" ${!localStorage.getItem(THEME_KEY)?'selected':''}>跟随系统</option>
+        </select>
+      </div>
+      <div class="settings-field">
+        <label>数据管理</label>
+        <div style="display:flex;gap:8px">
+          <button class="settings-test" onclick="exportJSON()">导出 JSON</button>
+          <button class="settings-test" onclick="document.getElementById('fileInput').click();closeModal()">导入 JSON</button>
+          <button class="settings-test" onclick="if(confirm('确定要清除所有本地数据吗？此操作不可撤销。')){localStorage.removeItem(STORAGE_KEY);if(currentFileHandle){idbDel(CURRENT_FILE_KEY).then(()=>location.reload())}else{location.reload()}}">重置所有数据</button>
+        </div>
+      </div>
+    ` : `
+      <div class="settings-field">
+        <label>API Base URL</label>
+        <input id="aiApiBase" value="${escHtml(cfg.apiBase||'')}" placeholder="https://api.openai.com/v1">
+        <small>兼容 OpenAI 格式的 API 地址，如 OpenAI、DeepSeek、通义千问等</small>
+      </div>
+      <div class="settings-field">
+        <label>API Key</label>
+        <input id="aiApiKey" type="password" value="${escHtml(cfg.apiKey||'')}" placeholder="sk-...">
+        <small>你的 API 密钥，仅存储在本地浏览器中</small>
+      </div>
+      <div class="settings-field">
+        <label>模型名称</label>
+        <input id="aiModel" value="${escHtml(cfg.model||'')}" placeholder="gpt-4o-mini">
+        <small>如 gpt-4o-mini、deepseek-chat、qwen-plus 等</small>
+      </div>
+      <div class="settings-field">
+        <label>Temperature（创造性 0-1）</label>
+        <input id="aiTemp" type="number" min="0" max="1" step="0.1" value="${cfg.temperature ?? 0.7}">
+        <small>较低值更精确，较高值更有创意</small>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="settings-test" id="aiTestBtn" onclick="testAIConnection()">测试连接</button>
+        <button class="settings-test" style="background:var(--primary);color:#fff;border-color:var(--primary)" onclick="saveAIFromSettings()">保存</button>
+      </div>
+    `}
+    <div class="modal-actions" style="margin-top:16px">
+      <button class="btn-cancel" onclick="closeModal()">关闭</button>
+    </div>
+  `;
+  document.getElementById('modalOverlay').classList.add('show');
+}
+
+/** 从设置弹窗保存 AI 配置 */
+function saveAIFromSettings() {
+  const apiBase = document.getElementById('aiApiBase')?.value?.trim();
+  const apiKey = document.getElementById('aiApiKey')?.value?.trim();
+  const model = document.getElementById('aiModel')?.value?.trim();
+  const temp = document.getElementById('aiTemp')?.value;
+  if (!apiBase || !apiKey || !model) { alert('请填写完整的 API 配置'); return; }
+  saveAIConfig(apiBase, apiKey, model, temp);
+  toast('AI 配置已保存');
+  closeModal();
+  updateAIStatus();
+}
+
+/** 测试 AI API 连接 */
+async function testAIConnection() {
+  const btn = document.getElementById('aiTestBtn');
+  const apiBase = document.getElementById('aiApiBase').value.trim();
+  const apiKey = document.getElementById('aiApiKey').value.trim();
+  const model = document.getElementById('aiModel').value.trim();
+  if (!apiBase || !apiKey || !model) { alert('请先填写完整的 API 配置'); return; }
+  btn.textContent = '测试中...'; btn.classList.add('testing');
+  try {
+    const res = await fetch(`${apiBase.replace(/\/+$/,'')}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body: JSON.stringify({ model, messages: [{ role: 'user', content: 'Hi' }], max_tokens: 10 })
+    });
+    if (res.ok) { btn.textContent = '✓ 连接成功'; btn.style.borderColor = 'var(--green)'; btn.style.color = 'var(--green)'; }
+    else { const err = await res.text(); btn.textContent = '✗ 失败'; alert(`API 返回错误 (${res.status}): ${err.slice(0, 200)}`); }
+  } catch (err) { btn.textContent = '✗ 失败'; alert('连接失败：' + err.message); }
+  setTimeout(() => { btn.textContent = '测试连接'; btn.classList.remove('testing'); btn.style.borderColor = ''; btn.style.color = ''; }, 2000);
+}
+
+/**
+ * 获取当前所有任务的摘要（供 AI 上下文使用）
+ * @returns {string} 格式化的任务列表文本
+ */
+function getTasksSummary() {
+  if (store.tasks.length === 0) return '当前没有任何任务。';
+  const projMap = {};
+  store.projects.forEach(p => projMap[p.id] = p.name);
+  const statusMap = { todo: '待办', doing: '进行中', done: '已完成' };
+  const priMap = { 0: 'P0紧急', 1: 'P1重要', 2: 'P2一般', 3: 'P3低' };
+  return store.tasks.map((t, i) => {
+    const proj = projMap[t.projectId] || '无分类';
+    const subs = (t.subtasks || []).map(s => `${s.completed ? '✓' : '○'} ${s.title}`).join('; ');
+    return `#${i+1} [${statusMap[t.status]||t.status}] [${priMap[t.priority]||'P2'}] ${t.title}` +
+      (t.dueDate ? ` | 截止: ${new Date(t.dueDate).toLocaleString('zh-CN')}` : '') +
+      (t.recur ? ` | 循环: ${getRecurDesc(t.recur, t.recurDay)}` : '') +
+      ` | 项目: ${proj}` +
+      (t.tags?.length ? ` | 标签: ${t.tags.join(', ')}` : '') +
+      (subs ? ` | 子任务: ${subs}` : '') +
+      (t.description ? ` | 备注: ${t.description}` : '');
+  }).join('\n');
+}
+
+/**
+ * 定义 AI 可调用的函数（OpenAI Function Calling 格式）
+ * 这些函数让 AI 能够直接操作待办列表
+ */
+function getAITools() {
+  return [
+    {
+      type: 'function',
+      function: {
+        name: 'create_task',
+        description: '创建一个新的待办任务',
+        parameters: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: '任务标题' },
+            description: { type: 'string', description: '任务描述/备注' },
+            priority: { type: 'number', enum: [0,1,2,3], description: '优先级：0=P0紧急 1=P1重要 2=P2一般 3=P3低' },
+            status: { type: 'string', enum: ['todo','doing','done'], description: '状态' },
+            dueDate: { type: 'string', description: '截止日期，ISO 8601 格式，如 2026-06-10T18:00:00+08:00' },
+            recur: { type: 'string', enum: ['daily','weekly','monthly','quarterly','yearly'], description: '循环周期：daily=每天 weekly=每周 monthly=每月 quarterly=每季度 yearly=每年' },
+            recurDay: { type: 'number', description: '循环日：weekly时为0-6（周日到周六），monthly/quarterly时为1-31（几号）' },
+            projectName: { type: 'string', description: '所属项目名称（如"工作项目"、"个人日常"、"学习计划"）' },
+            tags: { type: 'array', items: { type: 'string' }, description: '标签列表' },
+            subtasks: { type: 'array', items: { type: 'string' }, description: '子任务标题列表' }
+          },
+          required: ['title']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'update_task',
+        description: '通过任务标题（模糊匹配）更新已有任务的属性。可更新标题、描述、优先级、状态、截止日期等。',
+        parameters: {
+          type: 'object',
+          properties: {
+            searchTitle: { type: 'string', description: '要查找的任务标题关键词' },
+            title: { type: 'string', description: '新标题（可选）' },
+            description: { type: 'string', description: '新描述（可选）' },
+            priority: { type: 'number', enum: [0,1,2,3], description: '新优先级（可选）' },
+            status: { type: 'string', enum: ['todo','doing','done'], description: '新状态（可选）' },
+            dueDate: { type: 'string', description: '新截止日期（可选）' },
+            recur: { type: 'string', enum: ['daily','weekly','monthly','quarterly','yearly','none'], description: '循环周期（可选）：daily/weekly/monthly/quarterly/yearly，none=取消循环' },
+            recurDay: { type: 'number', description: '循环日（可选）：weekly时为0-6（周日到周六），monthly/quarterly时为1-31（几号）' },
+            addTags: { type: 'array', items: { type: 'string' }, description: '要添加的标签' },
+            removeTags: { type: 'array', items: { type: 'string' }, description: '要移除的标签' },
+            addSubtasks: { type: 'array', items: { type: 'string' }, description: '要添加的子任务标题' }
+          },
+          required: ['searchTitle']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'delete_task',
+        description: '通过任务标题（模糊匹配）删除一个任务',
+        parameters: {
+          type: 'object',
+          properties: {
+            searchTitle: { type: 'string', description: '要删除的任务标题关键词' }
+          },
+          required: ['searchTitle']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'toggle_task',
+        description: '切换任务的完成/未完成状态',
+        parameters: {
+          type: 'object',
+          properties: {
+            searchTitle: { type: 'string', description: '要切换状态的任务标题关键词' }
+          },
+          required: ['searchTitle']
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'list_tasks',
+        description: '按条件查询任务列表，返回匹配的任务信息',
+        parameters: {
+          type: 'object',
+          properties: {
+            status: { type: 'string', enum: ['todo','doing','done'], description: '按状态筛选' },
+            priority: { type: 'number', enum: [0,1,2,3], description: '按优先级筛选' },
+            projectName: { type: 'string', description: '按项目名称筛选' },
+            keyword: { type: 'string', description: '按关键词搜索标题和描述' }
+          }
+        }
+      }
+    },
+    {
+      type: 'function',
+      function: {
+        name: 'breakdown_task',
+        description: '为指定任务自动拆解出详细的子任务步骤',
+        parameters: {
+          type: 'object',
+          properties: {
+            searchTitle: { type: 'string', description: '要拆解的任务标题关键词' },
+            subtasks: { type: 'array', items: { type: 'string' }, description: '拆解出的子任务标题列表' }
+          },
+          required: ['searchTitle', 'subtasks']
+        }
+      }
+    }
+  ];
+}
+
+/**
+ * 查找任务（模糊匹配标题）
+ * @param {string} keyword - 搜索关键词
+ * @returns {object|null} 最佳匹配的任务
+ */
+function findTaskByKeyword(keyword) {
+  if (!keyword) return null;
+  const kw = keyword.toLowerCase();
+  // 优先精确匹配
+  let found = store.tasks.find(t => t.title === keyword);
+  if (found) return found;
+  // 然后包含匹配
+  found = store.tasks.find(t => t.title.toLowerCase().includes(kw));
+  if (found) return found;
+  // 最后模糊匹配
+  found = store.tasks.find(t => t.title.toLowerCase().split(/\s+/).some(w => w.includes(kw)));
+  return found || null;
+}
+
+/**
+ * 执行 AI 函数调用的实际操作
+ * @param {string} name - 函数名
+ * @param {object} args - 函数参数
+ * @returns {string} 操作结果描述
+ */
+function executeAIFunction(name, args) {
+  switch (name) {
+    case 'create_task': {
+      // 查找或创建项目
+      let projId = null;
+      if (args.projectName) {
+        const proj = store.projects.find(p => p.name.includes(args.projectName) || args.projectName.includes(p.name));
+        if (proj) projId = proj.id;
+        else {
+          // 自动创建新项目
+          projId = 'proj_' + uuid();
+          store.projects.push({ id: projId, name: args.projectName, color: '#6366f1', createdAt: now() });
+        }
+      }
+      // 确保标签在全局池中
+      (args.tags || []).forEach(tag => { if (!store.tags.includes(tag)) store.tags.push(tag); });
+      const task = {
+        id: uuid(),
+        title: args.title,
+        description: args.description || '',
+        priority: args.priority ?? 2,
+        status: args.status || 'todo',
+        dueDate: args.dueDate || null,
+        recur: ['daily','weekly','monthly','quarterly','yearly'].includes(args.recur) ? args.recur : null,
+        recurDay: typeof args.recurDay === 'number' ? args.recurDay : null,
+        projectId: projId,
+        tags: args.tags || [],
+        subtasks: (args.subtasks || []).map(st => ({ id: uuid(), title: st, completed: false })),
+        order: store.tasks.length,
+        createdAt: now(),
+        updatedAt: now()
+      };
+      // 自动推算 recurDay（如果 AI 没有明确提供）
+      if (task.recur && task.recurDay === null) {
+        const ref = task.dueDate ? new Date(task.dueDate) : new Date();
+        if (task.recur === 'weekly') task.recurDay = ref.getDay();
+        else if (task.recur === 'monthly' || task.recur === 'quarterly') task.recurDay = ref.getDate();
+      }
+      store.tasks.push(task);
+      saveStore(); renderAll();
+      return `已创建任务「${task.title}」` +
+        (task.subtasks.length ? `，含 ${task.subtasks.length} 个子任务` : '');
+    }
+
+    case 'update_task': {
+      const t = findTaskByKeyword(args.searchTitle);
+      if (!t) return `未找到匹配「${args.searchTitle}」的任务`;
+      if (args.title) t.title = args.title;
+      if (args.description !== undefined) t.description = args.description;
+      if (args.priority !== undefined) t.priority = args.priority;
+      if (args.status) t.status = args.status;
+      if (args.dueDate) t.dueDate = args.dueDate;
+      if (args.recur !== undefined) { t.recur = args.recur === 'none' ? null : (['daily','weekly','monthly','quarterly','yearly'].includes(args.recur) ? args.recur : t.recur); if(!t.recur) t.recurDay = null; }
+      if (args.recurDay !== undefined) t.recurDay = typeof args.recurDay === 'number' ? args.recurDay : null;
+      // 自动推算 recurDay（如果设了 recur 但没给 recurDay）
+      if (t.recur && t.recurDay === null && args.recurDay === undefined) {
+        const ref = t.dueDate ? new Date(t.dueDate) : new Date();
+        if (t.recur === 'weekly') t.recurDay = ref.getDay();
+        else if (t.recur === 'monthly' || t.recur === 'quarterly') t.recurDay = ref.getDate();
+      }
+      if (args.addTags) { args.addTags.forEach(tag => { if (!t.tags.includes(tag)) t.tags.push(tag); if (!store.tags.includes(tag)) store.tags.push(tag); }); }
+      if (args.removeTags) { t.tags = t.tags.filter(tg => !args.removeTags.includes(tg)); }
+      if (args.addSubtasks) { args.addSubtasks.forEach(st => t.subtasks.push({ id: uuid(), title: st, completed: false })); }
+      t.updatedAt = now();
+      saveStore(); renderAll();
+      return `已更新任务「${t.title}」`;
+    }
+
+    case 'delete_task': {
+      const t = findTaskByKeyword(args.searchTitle);
+      if (!t) return `未找到匹配「${args.searchTitle}」的任务`;
+      const title = t.title;
+      store.tasks = store.tasks.filter(x => x.id !== t.id);
+      if (selectedTaskId === t.id) selectedTaskId = null;
+      saveStore(); renderAll();
+      return `已删除任务「${title}」`;
+    }
+
+    case 'toggle_task': {
+      const t = findTaskByKeyword(args.searchTitle);
+      if (!t) return `未找到匹配「${args.searchTitle}」的任务`;
+      t.status = t.status === 'done' ? 'todo' : 'done';
+      t.updatedAt = now();
+      saveStore(); renderAll();
+      return `已将任务「${t.title}」标记为${t.status === 'done' ? '已完成' : '未完成'}`;
+    }
+
+    case 'list_tasks': {
+      let result = [...store.tasks];
+      if (args.status) result = result.filter(t => t.status === args.status);
+      if (args.priority !== undefined) result = result.filter(t => t.priority === args.priority);
+      if (args.projectName) {
+        const proj = store.projects.find(p => p.name.includes(args.projectName));
+        if (proj) result = result.filter(t => t.projectId === proj.id);
+      }
+      if (args.keyword) {
+        const kw = args.keyword.toLowerCase();
+        result = result.filter(t => t.title.toLowerCase().includes(kw) || (t.description||'').toLowerCase().includes(kw));
+      }
+      if (result.length === 0) return '没有找到匹配的任务';
+      const statusMap = { todo: '待办', doing: '进行中', done: '已完成' };
+      const priMap = { 0: 'P0', 1: 'P1', 2: 'P2', 3: 'P3' };
+      return `找到 ${result.length} 个任务：\n` + result.map(t =>
+        `- [${statusMap[t.status]}] [${priMap[t.priority]}] ${t.title}${t.dueDate ? ' (截止: ' + new Date(t.dueDate).toLocaleDateString('zh-CN') + ')' : ''}${t.recur ? ' (循环: ' + getRecurDesc(t.recur, t.recurDay) + ')' : ''}`
+      ).join('\n');
+    }
+
+    case 'breakdown_task': {
+      const t = findTaskByKeyword(args.searchTitle);
+      if (!t) return `未找到匹配「${args.searchTitle}」的任务`;
+      const newSubs = (args.subtasks || []).filter(st => !t.subtasks.some(existing => existing.title === st));
+      newSubs.forEach(st => t.subtasks.push({ id: uuid(), title: st, completed: false }));
+      t.updatedAt = now();
+      saveStore(); renderAll();
+      return `已为任务「${t.title}」添加 ${newSubs.length} 个子任务：${newSubs.join('、')}`;
+    }
+
+    default:
+      return `未知操作：${name}`;
+  }
+}
+
+/**
+ * 构建发送给 AI 的系统提示词
+ * 包含当前任务数据摘要和操作指引
+ */
+function buildSystemPrompt() {
+  const projNames = store.projects.map(p => p.name).join('、');
+  const tagNames = store.tags.join('、');
+  return `你是一个高效的待办事项管理助手。你可以帮助用户管理他们的任务列表。
+
+当前项目分类：${projNames || '无'}
+当前可用标签：${tagNames || '无'}
+
+当前所有任务：
+${getTasksSummary()}
+
+你可以通过函数调用来操作任务列表：
+- create_task: 创建新任务（支持设置循环周期）
+- update_task: 更新已有任务（支持修改循环周期）
+- delete_task: 删除任务
+- toggle_task: 切换任务完成状态
+- list_tasks: 查询任务
+- breakdown_task: 为任务添加子任务拆解
+
+关于循环任务：
+- 当用户提到"每天/每周/每月/每季度/每年"等周期性任务时，使用 recur 参数设置循环类型
+- weekly 类型需要设置 recurDay（0=周日, 1=周一, ..., 6=周六），根据用户指定的星期几来设置；如用户未指定则根据截止日期推算
+- monthly/quarterly 类型需要设置 recurDay（1-31，表示几号），根据用户指定的日期来设置；如用户未指定则根据截止日期推算
+- 循环任务完成后会自动推进截止日期到下一个周期
+
+注意事项：
+1. 当用户说"添加/创建任务"时，使用 create_task
+2. 当用户说"完成/做完了"某个任务时，使用 toggle_task
+3. 当用户要求"拆解/拆分"任务时，使用 breakdown_task 生成合理的子任务步骤
+4. 当用户问"有哪些任务/查看任务"时，使用 list_tasks
+5. 操作完成后，用简洁友好的中文告诉用户结果
+6. 如果用户请求任务规划建议，分析当前任务的优先级、截止日期等给出建议
+7. 如果用户要求总结，统计已完成/未完成/过期任务并给出总结
+8. 当前时间：${new Date().toLocaleString('zh-CN')}
+9. 回复请用中文`;
+}
+
+/**
+ * 发送消息给 AI 并处理响应
+ * 支持多轮对话和函数调用循环
+ */
+async function aiSend() {
+  const input = document.getElementById('aiInput');
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+
+  const cfg = getAIConfig();
+  if (!cfg) { showSettings('ai'); toast('请先配置 AI API'); return; }
+
+  // 添加用户消息到历史
+  store.aiChatHistory.push({ role: 'user', content: text });
+  renderAIMessages();
+  showAITyping(true);
+
+  try {
+    await processAIChat(cfg);
+  } catch (err) {
+    store.aiChatHistory.push({ role: 'assistant', content: `出错了：${err.message}`, isError: true });
+    renderAIMessages();
+  } finally {
+    showAITyping(false);
+    saveStore(); // 持久化聊天历史
+  }
+}
+
+/**
+ * 处理 AI 对话循环（支持多轮函数调用）
+ * 最多执行 5 轮函数调用，防止无限循环
+ */
+async function processAIChat(cfg) {
+  const maxRounds = 5;
+  for (let round = 0; round < maxRounds; round++) {
+    const messages = [
+      { role: 'system', content: buildSystemPrompt() },
+      ...store.aiChatHistory.filter(m => {
+        // 只保留 API 合法的 role，过滤掉 fn（UI 显示用）和错误消息
+        if(m.isError && m.role !== 'assistant') return false;
+        if(m.role === 'fn') return false;
+        return true;
+      })
+    ];
+
+    const res = await fetch(`${cfg.apiBase}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${cfg.apiKey}`
+      },
+      body: JSON.stringify({
+        model: cfg.model,
+        messages,
+        tools: getAITools(),
+        temperature: cfg.temperature || 0.7
+      })
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(`API 错误 (${res.status}): ${errText.slice(0, 200)}`);
+    }
+
+    const data = await res.json();
+    const choice = data.choices?.[0];
+    if (!choice) throw new Error('API 返回为空');
+
+    const msg = choice.message;
+
+    // 处理函数调用
+    if (msg.tool_calls && msg.tool_calls.length > 0) {
+      // 将 AI 的消息（含 tool_calls）加入历史
+      store.aiChatHistory.push({ role: 'assistant', content: msg.content || '', tool_calls: msg.tool_calls });
+
+      // 执行每个函数调用
+      const fnResults = [];
+      for (const tc of msg.tool_calls) {
+        const fnName = tc.function.name;
+        let fnArgs = {};
+        try { fnArgs = JSON.parse(tc.function.arguments); } catch {}
+
+        // 在聊天中显示操作
+        const fnDisplay = formatFnCall(fnName, fnArgs);
+        store.aiChatHistory.push({ role: 'fn', content: fnDisplay });
+        renderAIMessages();
+
+        const result = executeAIFunction(fnName, fnArgs);
+        fnResults.push({ tool_call_id: tc.id, role: 'tool', content: result });
+      }
+
+      // 将函数结果加入历史
+      fnResults.forEach(r => store.aiChatHistory.push(r));
+      // 继续循环让 AI 基于函数结果生成回复
+      continue;
+    }
+
+    // 普通文本回复
+    if (msg.content) {
+      store.aiChatHistory.push({ role: 'assistant', content: msg.content });
+      renderAIMessages();
+    }
+    break; // 没有函数调用，结束循环
+  }
+}
+
+/**
+ * 格式化函数调用为可读文本
+ */
+function formatFnCall(name, args) {
+  const nameMap = {
+    create_task: '创建任务',
+    update_task: '更新任务',
+    delete_task: '删除任务',
+    toggle_task: '切换完成状态',
+    list_tasks: '查询任务',
+    breakdown_task: '拆解子任务'
+  };
+  const label = nameMap[name] || name;
+  const details = [];
+  if (args.title) details.push(`标题: ${args.title}`);
+  if (args.searchTitle) details.push(`查找: ${args.searchTitle}`);
+  if (args.priority !== undefined) details.push(`优先级: P${args.priority}`);
+  if (args.status) details.push(`状态: ${{'todo':'待办','doing':'进行中','done':'已完成'}[args.status]}`);
+  if (args.subtasks) details.push(`子任务: ${args.subtasks.join(', ')}`);
+  return `🔧 ${label}${details.length ? ' — ' + details.join(' | ') : ''}`;
+}
+
+/** 渲染 AI 聊天消息列表 */
+function renderAIMessages() {
+  const container = document.getElementById('aiMsgs');
+  const empty = document.getElementById('aiEmpty');
+  if (empty) empty.style.display = store.aiChatHistory.length ? 'none' : 'flex';
+
+  // 清除旧消息（保留 empty 提示和 typing）
+  const typing = document.getElementById('aiTyping');
+  container.innerHTML = '';
+  if (empty) container.appendChild(empty);
+
+  store.aiChatHistory.forEach(msg => {
+    if (msg.role === 'tool') return; // 不显示原始工具返回
+    if (msg.role === 'assistant' && msg.tool_calls && !msg.content) return; // 跳过纯 tool_calls 消息
+
+    const div = document.createElement('div');
+    if (msg.role === 'fn') {
+      div.className = 'ai-msg fn-call';
+      div.innerHTML = `<span class="fn-name">${escHtml(msg.content)}</span>`;
+    } else if (msg.role === 'user') {
+      div.className = 'ai-msg user';
+      div.textContent = msg.content;
+    } else if (msg.role === 'assistant') {
+      div.className = 'ai-msg assistant';
+      div.innerHTML = formatAIResponse(msg.content);
+    }
+    container.appendChild(div);
+  });
+
+  if (typing) container.appendChild(typing);
+  // 滚动到底部
+  container.scrollTop = container.scrollHeight;
+}
+
+/**
+ * 增强版 Markdown 格式化 AI 回复
+ * 支持：表格、标题(h2-h4)、水平线、粗体/斜体、行内代码、无序/有序列表、引用块
+ */
+function formatAIResponse(text) {
+  if (!text) return '';
+  const lines = text.split('\n');
+  const parts = [];
+  let buf = '';
+  let i = 0;
+
+  function flush() {
+    if (buf) { parts.push(buf); buf = ''; }
+  }
+  function add(html) { flush(); parts.push(html); }
+
+  while (i < lines.length) {
+    const line = lines[i];
+    const trimmed = line.trim();
+
+    // === 表格 ===
+    if (trimmed.includes('|') && i + 1 < lines.length &&
+        /^\|?\s*[-:]+[-| :]*$/.test(lines[i + 1].trim())) {
+      let t = '<table><thead><tr>';
+      parseTableRow(trimmed).forEach(c => { t += '<th>' + fmtInline(escHtml(c)) + '</th>'; });
+      t += '</tr></thead><tbody>';
+      i += 2;
+      while (i < lines.length && lines[i].trim().includes('|')) {
+        t += '<tr>';
+        parseTableRow(lines[i].trim()).forEach(c => { t += '<td>' + fmtInline(escHtml(c)) + '</td>'; });
+        t += '</tr>';
+        i++;
+      }
+      t += '</tbody></table>';
+      add(t);
+      continue;
+    }
+
+    // === 水平线 ===
+    if (/^[-*_]{3,}\s*$/.test(trimmed)) {
+      add('<hr>');
+      i++;
+      continue;
+    }
+
+    // === 标题 ===
+    if (/^####\s+(.+)$/.test(trimmed)) {
+      add('<h4>' + fmtInline(escHtml(trimmed.slice(trimmed.indexOf(' ') + 1))) + '</h4>');
+      i++;
+      continue;
+    }
+    if (/^###\s+(.+)$/.test(trimmed)) {
+      add('<h3>' + fmtInline(escHtml(trimmed.slice(trimmed.indexOf(' ') + 1))) + '</h3>');
+      i++;
+      continue;
+    }
+    if (/^##\s+(.+)$/.test(trimmed)) {
+      add('<h2>' + fmtInline(escHtml(trimmed.slice(trimmed.indexOf(' ') + 1))) + '</h2>');
+      i++;
+      continue;
+    }
+
+    // === 引用块 ===
+    if (/^>\s*/.test(trimmed)) {
+      const qLines = [trimmed.replace(/^>\s*/, '')];
+      i++;
+      while (i < lines.length && /^>\s*/.test(lines[i].trim())) {
+        qLines.push(lines[i].trim().replace(/^>\s*/, ''));
+        i++;
+      }
+      add('<blockquote>' + qLines.map(l => fmtInline(escHtml(l))).join('<br>') + '</blockquote>');
+      continue;
+    }
+
+    // === 有序列表 ===
+    if (/^\d+\.\s+(.+)$/.test(trimmed)) {
+      let h = '<ol>';
+      while (i < lines.length && /^\d+\.\s+(.+)$/.test(lines[i].trim())) {
+        h += '<li>' + fmtInline(escHtml(lines[i].trim().match(/^\d+\.\s+(.+)$/)[1])) + '</li>';
+        i++;
+      }
+      h += '</ol>';
+      add(h);
+      continue;
+    }
+
+    // === 无序列表 ===
+    if (/^[-*]\s+(.+)$/.test(trimmed)) {
+      let h = '<ul>';
+      while (i < lines.length && /^[-*]\s+(.+)$/.test(lines[i].trim())) {
+        h += '<li>' + fmtInline(escHtml(lines[i].trim().match(/^[-*]\s+(.+)$/)[1])) + '</li>';
+        i++;
+      }
+      h += '</ul>';
+      add(h);
+      continue;
+    }
+
+    // === 空行 ===
+    if (trimmed === '') {
+      buf += '<br>';
+      i++;
+      continue;
+    }
+
+    // === 普通文本 ===
+    buf += fmtInline(escHtml(line)) + '<br>';
+    i++;
+  }
+
+  flush();
+
+  // 合并输出：移除多余空行，块元素间不加多余 <br>
+  let out = '';
+  for (let j = 0; j < parts.length; j++) {
+    const p = parts[j];
+    const isBlock = p.startsWith('<table') || p.startsWith('<h') || p.startsWith('<hr') ||
+                    p.startsWith('<blockquote') || p.startsWith('<ol') || p.startsWith('<ul');
+    out += p;
+    if (j < parts.length - 1 && !isBlock && !parts[j + 1].startsWith('<table') &&
+        !parts[j + 1].startsWith('<h') && !parts[j + 1].startsWith('<hr') &&
+        !parts[j + 1].startsWith('<blockquote') && !parts[j + 1].startsWith('<ol') &&
+        !parts[j + 1].startsWith('<ul')) {
+      // 非块元素之间不加额外 <br>（buf 自带）
+    }
+  }
+  // 清理连续多余 <br>
+  out = out.replace(/(<br>){3,}/g, '<br><br>');
+  return out;
+}
+
+/** 解析 Markdown 表格行，返回单元格内容数组 */
+function parseTableRow(line) {
+  return line.replace(/^\||\|$/g, '').split('|').map(c => c.trim());
+}
+
+/** 行内格式：代码、粗体、斜体 */
+function fmtInline(text) {
+  text = text.replace(/`([^`]+)`/g, '<code style="background:var(--code-bg);padding:1px 4px;border-radius:3px;font-size:12px">$1</code>');
+  text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  text = text.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
+  return text;
+}
+
+function showAITyping(show) {
+  const el = document.getElementById('aiTyping');
+  if (el) el.classList.toggle('show', show);
+}
+
+/** 快捷指令 */
+function aiQuick(prompt) {
+  const input = document.getElementById('aiInput');
+  if (input) { input.value = prompt; input.focus(); }
+}
+
+/** 拆解子任务快捷按钮 — 自动使用当前选中的任务 */
+function aiQuickBreakdown() {
+  let prompt = '帮我拆解一个任务的子任务';
+  if (selectedTaskId) {
+    const t = store.tasks.find(t => t.id === selectedTaskId);
+    if (t) prompt = `把「${t.title}」拆解成详细的子任务`;
+  }
+  aiQuick(prompt);
+}
+
+/* ============================================================================
+   ██  键盘快捷键
+   / → 聚焦搜索框
+   n → 聚焦快速添加
+   a → 打开/关闭 AI 面板
+   Esc → 关闭详情面板、AI 面板和弹窗
+   ============================================================================ */
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='INPUT'||e.target.tagName==='TEXTAREA'||e.target.tagName==='SELECT')return;
+  if(e.key==='/'){e.preventDefault();document.getElementById('searchInput').focus()}
+  if(e.key==='Escape'){closeDetail();closeModal();const aiP=document.getElementById('aiPanel');if(aiP)aiP.classList.remove('open');document.getElementById('searchInput').blur()}
+  if(e.key==='n'){e.preventDefault();const inp=document.getElementById('qaInput');if(inp)inp.focus()}
+  if(e.key==='a'){e.preventDefault();toggleAI()}
+});
+
+// AI 输入框快捷键：Enter 发送，Shift+Enter 换行
+document.addEventListener('keydown',e=>{
+  if(e.target.id==='aiInput'&&e.key==='Enter'&&!e.shiftKey){e.preventDefault();aiSend()}
+});
+
+/* ============================================================================
+   ██  初始化
+   启动应用 → 检查文件句柄 → 加载数据或显示欢迎屏
+   ============================================================================ */
+// TopoTash 桥接脚本在本脚本之后加载：统一等 DOMContentLoaded 后再决定启动方式
+window.addEventListener('DOMContentLoaded', function(){
+  if (window.TOPOTASH_CTX && window.ttBoot) window.ttBoot();
+  else bootApp();
+});
+</script>
+<script src="topotash-todo-bridge.js"></script>
+</body>
+</html>
