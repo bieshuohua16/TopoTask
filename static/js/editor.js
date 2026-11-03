@@ -16,7 +16,11 @@
   function setStatus(kind, text) {
     if (!status) return;
     const dot = kind === 'error' ? 'bad' : kind === 'saving' ? 'warn' : 'ok';
-    status.innerHTML = `<i class="dot ${dot}"></i><span>${TT.esc ? TT.esc(text) : text}</span>`;
+    const indicator = document.createElement('i');
+    indicator.className = 'dot ' + dot;
+    const label = document.createElement('span');
+    label.textContent = text;
+    status.replaceChildren(indicator, label);
   }
 
   const exportBtn = document.getElementById('btnExportDiagram');
@@ -30,6 +34,7 @@
   };
 
   window.addEventListener('message', (ev) => {
+    if (ev.origin !== location.origin || ev.source !== frame.contentWindow) return;
     const msg = ev.data || {};
     if (msg.type === 'topotash:visio-saved') {
       setStatus('ok', '已保存 · ' + (msg.nodeCount || 0) + ' 个节点');

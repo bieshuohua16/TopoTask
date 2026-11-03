@@ -7,7 +7,7 @@ TopoTash 是一个自带后端的完整 Web 应用。每个项目下有多个任
 - 项目总览、阶段看板、拓扑图库（新建 / 导入 / 复制 / 绑定项目；支持暂不绑定项目的库内图纸）、项目工作台
 - 原生任务台：按售前阶段分组的列表、状态看板、优先级、子任务、标签、搜索、任务↔图纸↔节点关联
 - 全局 AI 助手：一处配置 OpenAI 兼容 API，向导式新建项目、管理任务；所有写入先生成草稿，确认后执行
-- 拓扑编辑器：系统架构图、逻辑拓扑、POC 部署图，节点级任务联动；只保留 PNG / SVG / reveal.js 片段三种导出，画布自动保存到 TopoTash
+- 拓扑编辑器：系统架构图、逻辑拓扑、POC 部署图，节点级任务联动；支持 JSON / PNG / SVG / reveal.js 片段导出，画布自动保存到 TopoTash
 - SQLite 持久化，数据全部落在项目根目录，离线可用
 
 ![项目总览](docs/screenshots/01-dashboard.png)
@@ -32,7 +32,7 @@ TopoTash 是一个自带后端的完整 Web 应用。每个项目下有多个任
 
 ## 快速开始
 
-环境：Python 3.10+（开发时使用 3.15），浏览器用 Chrome / Edge。
+环境：Python 3.10+（当前测试环境为 3.12），浏览器用 Chrome / Edge。
 
 ### Windows 一键首次启动
 
@@ -60,9 +60,10 @@ python setup_first_run.py --help               # 全部参数
 python start_topotash.py                # 启动并打开浏览器（127.0.0.1:5000）
 python start_topotash.py --port 5050    # 换端口
 python start_topotash.py --debug        # Flask 调试模式
+python start_topotash.py --db D:\data\tt.db  # 指定数据库
 ```
 
-> 快捷方式记录的是当前 Python 解释器路径和项目绝对路径。更换 Python、移动项目目录后，重新双击 `首次启动.bat` 即可更新。
+> 快捷方式记录当前 Python 解释器、项目和数据库的绝对路径。更换 Python、移动项目目录后，重新运行首次启动向导即可更新；自定义数据库请继续传入 `--db`。若端口上的实例使用其他数据库，启动器会提示换端口。
 
 ### 手动启动
 
@@ -100,6 +101,8 @@ python -m unittest discover -s tests -t . -v
 - 总览 / 阶段看板 / 关联视图 / 全局搜索、页面路由、静态资源与 JSON 错误格式
 - 示例数据、历史任务/画布 JSON 迁移、`init-db` / `seed-demo` CLI
 - AI 配置校验、密钥掩码、工具循环、草稿确认/取消/并发保护（模型调用用替身，不联网）
+- 草稿字段冲突与数据保留、模型等待期间的并行写入、主任务删除后的状态接续、参数校验与批量查询
+- 拓扑绘图共用全局配置、流式转发、上游错误、连接关闭与旧配置迁移
 
 真实模型联调：启动服务后打开「AI 助手 → 设置」填写 Base、Key、模型并点「测试连接」，或直接调用 `POST /api/ai/test`。Key 只写入本地 `app_settings` 表（`topotash.db` 已被 `.gitignore` 排除），不会出现在代码或页面里。
 
@@ -174,7 +177,9 @@ TopoTash/
 │   ├── test_tools.py           # 示例数据、历史 JSON 迁移、Flask CLI
 │   ├── test_setup_scripts.py   # 首次启动向导辅助函数与图标生成
 │   ├── test_ai.py              # AI 草稿/确认/配置/会话（假模型，不联网）
-│   └── test_ai_config.py       # AI 配置校验、工具循环、草稿生命周期
+│   ├── test_ai_config.py       # AI 配置校验、工具循环、草稿生命周期
+│   ├── test_ai_topology.py     # 拓扑绘图全局配置、流式代理与密钥隔离
+│   └── test_regressions.py     # 草稿冲突、数据保留、并发、查询与启动回归
 ├── tools/
 │   ├── seed_demo.py            # 示例数据
 │   ├── data/gpu_cluster_topology.vweb.json  # 真实画布存档（示例数据里的 GPU 集群拓扑）
@@ -252,6 +257,7 @@ POST   /api/ai/conversations                  新建对话
 GET    /api/ai/conversations/<id>             对话详情（消息 + 草稿）
 DELETE /api/ai/conversations/<id>             删除对话
 POST   /api/ai/chat                           发送消息（服务端代理模型 + 工具循环）
+POST   /api/ai/topology                       拓扑绘图流式生成（使用全局 AI 配置）
 POST   /api/ai/actions/<id>/confirm           确认执行草稿
 POST   /api/ai/actions/<id>/cancel            取消草稿
 ```
@@ -259,20 +265,22 @@ POST   /api/ai/actions/<id>/cancel            取消草稿
 ## 设计说明
 
 - 技术选型：Flask 3 + sqlite3 标准库 + Jinja + 原生 JS，无 ORM、无前端构建步骤，便于本地运行和二次修改。
-- 项目是唯一枢纽：任务与拓扑图都必须挂在项目下，跨项目查询由聚合接口完成。
+- 任务归属项目；拓扑图可先放在图库中，再绑定项目。跨项目查询由聚合接口完成。
 - 节点索引：`diagram_nodes` 不是画布副本，而是从 `content_json` 解析出的「可检索节点」，保存画布时增量 upsert、删除已不存在的节点。
 - 节点角标状态：`diagram_nodes.followup_status` 与主任务状态联动；任务完成时自动把角标改成「已完成」。
-- 自动保存：拓扑编辑器每次 `commit()` 后 900ms 防抖 PUT；原生任务台按操作立即 PATCH/POST，项目统计通过事件刷新。
+- 自动保存：拓扑编辑器修改、撤销和重做后 900ms 防抖 PUT；保存期间的新改动会继续保存，完成前保留未保存标记。原生任务台按操作立即 PATCH/POST，项目统计通过事件刷新。
 - 任务台不再嵌套 TodoFlow：列表按售前阶段分组，看板按状态分列，任务详情直接管理子任务、标签、关联图纸和拓扑节点。
 - 全局 AI 两阶段写入：读工具直接查询；`create/update/delete` 工具只生成 `ai_actions` 草稿，用户在抽屉里改字段并点确认后才调用 `services.py` 落库，失败不会留下半成品。
+- 修改草稿只写入实际改动的字段；同一字段在草稿生成后被修改时会提示冲突，需要重新生成草稿。升级前生成、缺少字段快照的修改草稿也需要重新生成。
 - AI 配置只存一份：`app_settings.ai_config`，首次打开会自动迁移最近一个项目的旧 `aiConfig`；模型请求由 Flask 转发，Key 不回传浏览器。
+- 拓扑编辑器与全局助手共用上述配置；编辑器中的「全局 AI 设置」也保存到同一处，API Key 留空保留已存密钥。绘图使用流式转发，每次调用读取最新配置，不再读取浏览器中的独立 LLM 配置。
 - AI 会话和草稿持久化在 `ai_conversations/ai_messages/ai_actions`，刷新页面或切换项目仍可继续。
 
 ## 已知限制
 
 - 单用户本地应用，没有认证 / 多租户 / 冲突合并；同一个项目不要同时在两个浏览器里编辑。
 - 拓扑图缩略图暂用占位图，未生成真实 PNG 预览。
-- AI 首版为非流式输出（等待完整回复）；拓扑图相关的 AI 操作为只读，任务与项目支持读写。
+- 全局助手等待完整回复，其拓扑工具为只读；编辑器内的 AI 绘图支持流式生成与确认应用。任务与项目支持草稿确认后读写。
 - AI 模型需支持 OpenAI 兼容的 `tools` / function calling，否则无法生成项目/任务草稿。
 - API Key 以明文保存在本地 SQLite；本应用默认只监听 `127.0.0.1`，请勿直接暴露到公网。
 - 删除项目会级联删除任务、拓扑图与关联，界面有二次确认；AI 删除项目同样需要确认草稿。

@@ -118,6 +118,9 @@
     document.getElementById('aiHistoryBtn').addEventListener('click', toggleHistory);
     document.getElementById('aiNewBtn').addEventListener('click', newChat);
     document.getElementById('aiSettingsBtn').addEventListener('click', openConfig);
+    window.addEventListener('focus', function () {
+      loadConfig().catch(function () {});
+    });
     els.composer.addEventListener('submit', function (ev) {
       ev.preventDefault();
       send();
@@ -181,7 +184,7 @@
     renderContext();
     renderStatus();
 
-    if (!state.config) loadConfig().catch(function () {});
+    loadConfig().catch(function () {});
     if (!wasOpen) {
       if (state.conversationId) {
         loadConversation(state.conversationId);
@@ -356,7 +359,10 @@
     if (!card || card.classList.contains('busy')) return;
     const values = {};
     card.querySelectorAll('[data-field]').forEach(function (el) {
-      values[el.dataset.field] = el.value;
+      values[el.dataset.field] = el.type === 'datetime-local'
+        ? (el.value === el.dataset.initial ? el.dataset.original
+          : el.value ? new Date(el.value).toISOString() : '')
+        : el.value;
     });
     card.classList.add('busy');
     btn.disabled = true;
@@ -441,7 +447,7 @@
         detail: { projectId: projectId }
       }));
     }
-    if (window.TTTasks && projectId && CFG.projectId === projectId) {
+    if (window.TTTasks && projectId && CFG.projectId === projectId && TT.qs('tab') === 'tasks') {
       window.TTTasks.refresh();
     }
     if (action.kind === 'delete_project' && CFG.projectId && CFG.projectId === action.project_id) {
@@ -450,8 +456,14 @@
   }
 
   // ------------------------------------------------------------------ config
-  function openConfig() {
+  async function openConfig() {
     init();
+    try {
+      await loadConfig();
+    } catch (err) {
+      TT.toast('读取全局 AI 配置失败：' + err.message, 'error');
+      return;
+    }
     const cfg = state.config || {};
     const presetButtons = (cfg.presets || []).map(function (preset) {
       return '<button type="button" class="ai-preset" data-preset-base="' + TT.esc(preset.api_base) +
@@ -697,7 +709,14 @@
   function fieldHtml(actionId, field, value) {
     const key = field.key;
     const inputId = 'af_' + actionId + '_' + key;
-    const v = value == null ? '' : String(value);
+    let v = value == null ? '' : String(value);
+    if (field.type === 'datetime-local' && v) {
+      const date = new Date(v);
+      if (!isNaN(date.getTime())) {
+        const p = n => String(n).padStart(2, '0');
+        v = `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}T${p(date.getHours())}:${p(date.getMinutes())}:${p(date.getSeconds())}`;
+      }
+    }
     let control;
     if (field.type === 'select') {
       control = '<select id="' + inputId + '" data-field="' + TT.esc(key) + '">' +
@@ -713,7 +732,10 @@
         : field.type === 'datetime-local' ? 'datetime-local'
         : field.type === 'number' ? 'number' : 'text';
       control = '<input id="' + inputId + '" data-field="' + TT.esc(key) + '" type="' + type +
-        '" value="' + TT.esc(v) + '" placeholder="' + TT.esc(field.placeholder || '') + '">';
+        '" value="' + TT.esc(v) + '"' + (type === 'datetime-local'
+          ? ' step="1" data-initial="' + TT.esc(v.replace(/:00$/, '')) +
+            '" data-original="' + TT.esc(value || '') + '"' : '') +
+        ' placeholder="' + TT.esc(field.placeholder || '') + '">';
     }
     return '<label class="ai-field' + (field.wide ? ' wide' : '') + '" for="' + inputId + '">' +
       '<span>' + TT.esc(field.label) + (field.required ? ' *' : '') + '</span>' +

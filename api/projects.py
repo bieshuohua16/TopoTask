@@ -16,10 +16,12 @@ from services import (
     create_project_record,
     create_task_record,
     delete_project_record,
+    delete_task_record,
     diagram_dict,
     ensure_project,
     project_dict,
     project_stats,
+    projects_stats,
     tasks_to_dicts,
     text,
     todo_state,
@@ -51,9 +53,26 @@ def list_projects():
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
     rows = db.execute(f"SELECT * FROM projects {where} ORDER BY updated_at DESC", args).fetchall()
     items = []
+    stats = projects_stats(r["id"] for r in rows)
+    followups = {}
+    if rows:
+        placeholders = ",".join("?" * len(rows))
+        nodes = db.execute(
+            f"""SELECT * FROM (
+                 SELECT dn.*, d.name AS diagram_name, d.project_id,
+                        ROW_NUMBER() OVER (PARTITION BY d.project_id ORDER BY dn.synced_at DESC, dn.id DESC) AS position
+                 FROM diagram_nodes dn JOIN diagrams d ON d.id=dn.diagram_id
+                 WHERE d.project_id IN ({placeholders}) AND dn.followup_status IN ('todo','doing')
+               ) WHERE position<=5 ORDER BY project_id, position""", [r["id"] for r in rows],
+        )
+        for node in nodes:
+            item = dict(node)
+            pid = item.pop("project_id")
+            item.pop("position")
+            followups.setdefault(pid, []).append(item)
     for row in rows:
-        p = project_dict(row, project_stats(row["id"]))
-        p["followup_nodes"] = _followup_nodes(row["id"], limit=5)
+        p = project_dict(row, stats[row["id"]])
+        p["followup_nodes"] = followups.get(row["id"], [])
         items.append(p)
     return jsonify(
         {
@@ -226,7 +245,11 @@ def put_todo_state(project_id):
 
     deleted = data.get("deleted_task_ids") or []
     for tid in deleted:
-        db.execute("DELETE FROM tasks WHERE id=? AND project_id=?", (text(tid), project_id))
+        row = db.execute(
+            "SELECT id FROM tasks WHERE id=? AND project_id=?", (text(tid), project_id)
+        ).fetchone()
+        if row:
+            delete_task_record(row["id"])
 
     # 3) 标签池：保留传入 + 任务实际使用，其余删除
     desired = {text(x) for x in (data.get("tags") or []) if text(x)}

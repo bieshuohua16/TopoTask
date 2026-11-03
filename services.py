@@ -1,6 +1,7 @@
 """Domain helpers shared by the API blueprints."""
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Iterable
 
 from db import ApiError, get_db, load_json, new_id, utcnow
@@ -87,43 +88,47 @@ def project_dict(row, stats: dict | None = None) -> dict:
 
 
 def project_stats(project_id: str) -> dict:
+    return projects_stats([project_id])[project_id]
+
+
+def projects_stats(project_ids: Iterable[str]) -> dict[str, dict]:
+    """Fetch statistics for a set of projects in three queries."""
+    ids = list(dict.fromkeys(project_ids))
+    if not ids:
+        return {}
     db = get_db()
-    counts = db.execute(
-        """SELECT
+    placeholders = ",".join("?" * len(ids))
+    counts = {r["project_id"]: r for r in db.execute(
+        f"""SELECT project_id,
              COUNT(*) AS total,
              SUM(CASE WHEN status='done' THEN 1 ELSE 0 END) AS done,
              SUM(CASE WHEN status='doing' THEN 1 ELSE 0 END) AS doing,
-             SUM(CASE WHEN status!='done' THEN 1 ELSE 0 END) AS open
-           FROM tasks WHERE project_id=?""",
-        (project_id,),
-    ).fetchone()
-    diagram = db.execute(
-        "SELECT COUNT(*) AS n FROM diagrams WHERE project_id=?", (project_id,)
-    ).fetchone()
-    followup = db.execute(
-        """SELECT COUNT(*) AS n FROM diagram_nodes dn
+             SUM(CASE WHEN status!='done' THEN 1 ELSE 0 END) AS open,
+             MIN(CASE WHEN status!='done' AND due_date!='' THEN due_date END) AS next_due
+           FROM tasks WHERE project_id IN ({placeholders}) GROUP BY project_id""", ids,
+    )}
+    diagrams = {r["project_id"]: r["n"] for r in db.execute(
+        f"SELECT project_id, COUNT(*) AS n FROM diagrams WHERE project_id IN ({placeholders}) GROUP BY project_id",
+        ids,
+    )}
+    followups = {r["project_id"]: r["n"] for r in db.execute(
+        f"""SELECT d.project_id, COUNT(*) AS n FROM diagram_nodes dn
            JOIN diagrams d ON d.id = dn.diagram_id
-           WHERE d.project_id=? AND dn.followup_status IN ('todo','doing')""",
-        (project_id,),
-    ).fetchone()
-    next_due = db.execute(
-        """SELECT due_date FROM tasks
-           WHERE project_id=? AND status!='done' AND due_date IS NOT NULL AND due_date!=''
-           ORDER BY due_date ASC LIMIT 1""",
-        (project_id,),
-    ).fetchone()
-    total = counts["total"] or 0
-    done = counts["done"] or 0
-    return {
-        "task_total": total,
-        "task_done": done,
-        "task_doing": counts["doing"] or 0,
-        "task_open": counts["open"] or 0,
-        "task_progress": round(done / total * 100) if total else 0,
-        "diagram_count": diagram["n"] or 0,
-        "followup_count": followup["n"] or 0,
-        "next_due": next_due["due_date"] if next_due else None,
-    }
+           WHERE d.project_id IN ({placeholders}) AND dn.followup_status IN ('todo','doing')
+           GROUP BY d.project_id""", ids,
+    )}
+    out = {}
+    for pid in ids:
+        count = dict(counts[pid]) if pid in counts else {}
+        total, done = count.get("total", 0), count.get("done", 0)
+        out[pid] = {
+            "task_total": total, "task_done": done,
+            "task_doing": count.get("doing", 0), "task_open": count.get("open", 0),
+            "task_progress": round(done / total * 100) if total else 0,
+            "diagram_count": diagrams.get(pid, 0), "followup_count": followups.get(pid, 0),
+            "next_due": count.get("next_due"),
+        }
+    return out
 
 
 PROJECT_FIELDS = (
@@ -137,6 +142,8 @@ def clean_project_payload(data: dict, partial: bool = False) -> dict:
     out = {}
     for key in PROJECT_FIELDS:
         if key in data:
+            if data[key] is not None and not isinstance(data[key], str):
+                raise ApiError(f"{key} 必须是文本", 400, "invalid_field")
             out[key] = data[key]
     if "name" in out:
         out["name"] = text(out["name"])
@@ -147,8 +154,10 @@ def clean_project_payload(data: dict, partial: bool = False) -> dict:
         out["stage"] = clean_stage(out["stage"])
     if "status" in out:
         out["status"] = clean_status(out["status"])
-    if not partial and not out.get("name"):
+    if ("name" in out or not partial) and not out.get("name"):
         raise ApiError("项目名称不能为空", 400, "name_required")
+    if "color" in out:
+        out["color"] = text(out["color"]) or "#5b6cf0"
     return out
 
 
@@ -309,6 +318,8 @@ def task_dict(task_id: str) -> dict | None:
 
 
 def _set_task_tags(task_id: str, project_id: str, names: list[str], db=None) -> None:
+    if not isinstance(names, list) or any(not isinstance(name, str) for name in names):
+        raise ApiError("tags 必须是文本数组", 400, "invalid_tags")
     db = db or get_db()
     db.execute("DELETE FROM task_tags WHERE task_id=?", (task_id,))
     seen = set()
@@ -334,6 +345,8 @@ def _set_task_tags(task_id: str, project_id: str, names: list[str], db=None) -> 
 
 
 def _replace_subtasks(task_id: str, subtasks: list[dict], db=None) -> None:
+    if not isinstance(subtasks, list):
+        raise ApiError("subtasks 必须是数组", 400, "invalid_subtasks")
     db = db or get_db()
     keep = []
     now = utcnow()
@@ -371,7 +384,28 @@ def _replace_subtasks(task_id: str, subtasks: list[dict], db=None) -> None:
         db.execute("DELETE FROM subtasks WHERE task_id=?", (task_id,))
 
 
+def validate_task_payload(payload: dict) -> None:
+    for key in ("id", "title", "description", "stage", "status", "category_id", "due_date", "recur"):
+        value = payload.get(key)
+        if value is not None and not isinstance(value, str):
+            raise ApiError(f"{key} 必须是文本", 400, "invalid_field")
+    if payload.get("due_date"):
+        try:
+            datetime.fromisoformat(payload["due_date"].replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ApiError("截止时间格式不正确", 400, "invalid_due_date") from exc
+    if "tags" in payload and payload["tags"] is not None:
+        if not isinstance(payload["tags"], list) or any(not isinstance(x, str) for x in payload["tags"]):
+            raise ApiError("tags 必须是文本数组", 400, "invalid_tags")
+    if "subtasks" in payload and payload["subtasks"] is not None:
+        if not isinstance(payload["subtasks"], list) or any(not isinstance(x, dict) for x in payload["subtasks"]):
+            raise ApiError("subtasks 必须是对象数组", 400, "invalid_subtasks")
+    if payload.get("recur_day") is not None and not isinstance(payload["recur_day"], int):
+        raise ApiError("recur_day 必须是整数", 400, "invalid_field")
+
+
 def create_task_record(project_id: str, payload: dict, source: str = "manual", log: bool = True) -> str:
+    validate_task_payload(payload)
     db = get_db()
     project = ensure_project(project_id)
     now = utcnow()
@@ -429,6 +463,7 @@ def create_task_record(project_id: str, payload: dict, source: str = "manual", l
 
 
 def update_task_record(task_id: str, payload: dict, log: bool = True) -> dict:
+    validate_task_payload(payload)
     db = get_db()
     row = db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
     if not row:
@@ -496,17 +531,26 @@ def delete_task_record(task_id: str) -> dict:
     ).fetchall()
     db.execute("DELETE FROM tasks WHERE id=?", (task_id,))
     for link in diagrams:
-        remaining = db.execute(
-            "SELECT 1 FROM node_task_links WHERE diagram_id=? AND node_key=? LIMIT 1",
-            (link["diagram_id"], link["node_key"]),
-        ).fetchone()
-        if not remaining:
-            db.execute(
-                "UPDATE diagram_nodes SET followup_status='none' WHERE diagram_id=? AND node_key=?",
-                (link["diagram_id"], link["node_key"]),
-            )
+        reconcile_node_tasks(link["diagram_id"], link["node_key"])
     log_activity(row["project_id"], "task", task_id, "delete", row["title"])
     return {"deleted": True, "id": task_id, "title": row["title"], "project_id": row["project_id"]}
+
+
+def reconcile_node_tasks(diagram_id: str, node_key: str) -> None:
+    """Choose a remaining primary task and recompute the node badge after removal."""
+    db = get_db()
+    remaining = db.execute(
+        """SELECT l.id, l.is_primary, t.status FROM node_task_links l
+           JOIN tasks t ON t.id=l.task_id WHERE l.diagram_id=? AND l.node_key=?
+           ORDER BY l.is_primary DESC, l.id LIMIT 1""",
+        (diagram_id, node_key),
+    ).fetchone()
+    if remaining and not remaining["is_primary"]:
+        db.execute("UPDATE node_task_links SET is_primary=1 WHERE id=?", (remaining["id"],))
+    db.execute(
+        "UPDATE diagram_nodes SET followup_status=? WHERE diagram_id=? AND node_key=?",
+        (remaining["status"] if remaining else "none", diagram_id, node_key),
+    )
 
 
 def sync_node_status_for_task(task_id: str) -> None:

@@ -18,7 +18,7 @@ import json
 import re
 import urllib.error
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
 from db import ApiError, get_db, load_json, new_id, utcnow
@@ -266,14 +266,16 @@ def _read_error_detail(exc: urllib.error.HTTPError) -> str:
     return raw[:400]
 
 
-def chat_completion(
+def _open_chat_completion(
     cfg: dict,
     messages: list[dict],
     tools: list[dict] | None = None,
     timeout: int = 90,
     max_tokens: int | None = None,
-) -> dict:
-    """POST an OpenAI-compatible /chat/completions request."""
+    stream: bool = False,
+    json_mode: bool = False,
+):
+    """Open a model response using server-owned configuration."""
     api_base = _normalize_api_base(cfg.get("api_base"))
     if not api_base or not cfg.get("model"):
         raise ApiError("AI 尚未配置，请先填写 API Base 与模型。", 400, "ai_not_configured")
@@ -290,10 +292,14 @@ def chat_completion(
         body["tool_choice"] = "auto"
     if max_tokens:
         body["max_tokens"] = max_tokens
+    if stream:
+        body["stream"] = True
+    if json_mode:
+        body["response_format"] = {"type": "json_object"}
 
     headers = {
         "Content-Type": "application/json",
-        "Accept": "application/json",
+        "Accept": "text/event-stream" if stream else "application/json",
         "User-Agent": "TopoTash/2 AI",
     }
     if cfg.get("api_key"):
@@ -306,8 +312,7 @@ def chat_completion(
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            raw = response.read().decode("utf-8", "replace")
+        return urllib.request.urlopen(request, timeout=timeout)
     except urllib.error.HTTPError as exc:
         raise ApiError(
             _friendly_http_error(exc.code, _read_error_detail(exc)),
@@ -316,6 +321,23 @@ def chat_completion(
         ) from exc
     except urllib.error.URLError as exc:
         raise ApiError(f"无法连接模型服务：{exc.reason}", 502, "ai_network_error") from exc
+    except TimeoutError as exc:
+        raise ApiError("模型服务响应超时，请稍后重试。", 504, "ai_timeout") from exc
+    except OSError as exc:
+        raise ApiError(f"模型请求失败：{exc}", 502, "ai_network_error") from exc
+
+
+def chat_completion(
+    cfg: dict,
+    messages: list[dict],
+    tools: list[dict] | None = None,
+    timeout: int = 90,
+    max_tokens: int | None = None,
+) -> dict:
+    """POST an OpenAI-compatible /chat/completions request."""
+    try:
+        with _open_chat_completion(cfg, messages, tools, timeout, max_tokens) as response:
+            raw = response.read().decode("utf-8", "replace")
     except TimeoutError as exc:
         raise ApiError("模型服务响应超时，请稍后重试。", 504, "ai_timeout") from exc
     except OSError as exc:
@@ -336,6 +358,40 @@ def chat_completion(
         message = error.get("message") if isinstance(error, dict) else str(error)
         raise ApiError(f"模型返回错误：{text(message)[:300]}", 502, "ai_upstream_error")
     return data
+
+
+def topology_completion(messages):
+    """Stream drawing replies with the latest global configuration and no DB lock."""
+    if not isinstance(messages, list) or not 1 <= len(messages) <= 42:
+        raise ApiError("messages 必须是非空消息数组（最多 42 条）", 400, "invalid_messages")
+    clean_messages = []
+    for message in messages:
+        if (
+            not isinstance(message, dict)
+            or message.get("role") not in ("system", "user", "assistant")
+            or not isinstance(message.get("content"), str)
+        ):
+            raise ApiError("消息必须包含有效的 role 与文本 content", 400, "invalid_messages")
+        clean_messages.append({"role": message["role"], "content": message["content"]})
+    migrate_legacy_ai_config()
+    cfg = get_ai_config()
+    # Release any transaction opened by legacy migration before contacting the model.
+    get_db().commit()
+    response = _open_chat_completion(
+        cfg, clean_messages, timeout=300, max_tokens=8192, stream=True, json_mode=True,
+    )
+
+    def chunks():
+        try:
+            for line in response:
+                yield line
+        except OSError:
+            error = {"error": {"message": "模型响应中断，请重试。"}}
+            yield ("\ndata: " + json.dumps(error, ensure_ascii=False) + "\n\n").encode("utf-8")
+        finally:
+            response.close()
+
+    return chunks()
 
 
 def test_ai_connection(draft: dict | None = None) -> dict:
@@ -601,10 +657,19 @@ def _datetime_local(value) -> str:
     value = text(value)
     if not value:
         return ""
-    value = value.replace(" ", "T")[:16]
-    if len(value) == 10:
-        value += "T00:00"
-    return value
+    parsed = _local_dt(value)
+    return parsed.isoformat(timespec="minutes") if parsed else ""
+
+
+def _utc_due(value) -> str | None:
+    value = text(value)
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ApiError("截止时间格式不正确", 400, "invalid_due_date") from exc
+    return parsed.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
 def _local_dt(value):
@@ -1140,6 +1205,7 @@ def _tool_update_project(conversation_id: str, args: dict) -> dict:
         "title": f"更新项目「{current['name']}」",
         "subtitle": "确认后把以下修改写入项目。",
         "values": values,
+        "baseline": current,
         "summary": _diff_summary(current, changes),
         "warning": "",
         "project_id": project["id"],
@@ -1185,7 +1251,7 @@ def _task_values(args: dict, project: dict) -> dict:
         "stage": _stage_key(args.get("stage"), project["stage"]),
         "status": _task_status_key(args.get("status"), "todo"),
         "priority": _priority_value(args.get("priority"), 2),
-        "due_date": _datetime_local(args.get("due_date")),
+        "due_date": _utc_due(args.get("due_date")) or "",
         "tags": ", ".join(_parse_tags(args.get("tags"))),
         "subtasks": "\n".join(_lines(args.get("subtasks"))),
     }
@@ -1257,8 +1323,8 @@ def _tool_update_task(conversation_id: str, args: dict) -> dict:
         if priority != current["priority"]:
             changes["priority"] = priority
     if "due_date" in args and args.get("due_date") is not None:
-        due = _datetime_local(args.get("due_date"))
-        if due != _datetime_local(current["due_date"]):
+        due = _utc_due(args.get("due_date")) or ""
+        if _local_dt(due) != _local_dt(current["due_date"]):
             changes["due_date"] = due
     if "tags" in args and args.get("tags") is not None:
         tags = _parse_tags(args.get("tags"))
@@ -1278,6 +1344,7 @@ def _tool_update_task(conversation_id: str, args: dict) -> dict:
         "title": f"更新任务「{current['title']}」",
         "subtitle": f"项目：{data.get('project_name', '')}",
         "values": values,
+        "baseline": current,
         "summary": summary,
         "warning": "",
         "project_id": data["project_id"],
@@ -1558,7 +1625,7 @@ def _apply_create_project(payload: dict, values: dict) -> dict:
 def _apply_update_project(payload: dict, values: dict) -> dict:
     project_id = text(payload.get("project_id"))
     current = ensure_project(project_id)
-    candidate = clean_project_payload(values, partial=True)
+    candidate = clean_project_payload(_draft_changes(payload, values, current), partial=True)
     if "name" in candidate and not candidate["name"]:
         raise ApiError("项目名称不能为空", 400, "name_required")
     changes = {
@@ -1591,7 +1658,7 @@ def _apply_create_task(payload: dict, values: dict) -> dict:
             "stage": clean_stage(values.get("stage"), project["stage"]),
             "status": clean_task_status(values.get("status"), "todo"),
             "priority": clean_int(values.get("priority"), 2, 0, 3),
-            "due_date": text(values.get("due_date")) or None,
+            "due_date": _utc_due(values.get("due_date")),
             "tags": _parse_tags(values.get("tags")),
             "subtasks": [{"title": line} for line in _lines(values.get("subtasks"))],
         },
@@ -1610,15 +1677,11 @@ def _apply_update_task(payload: dict, values: dict) -> dict:
     current = task_dict(task_id)
     if not current:
         raise ApiError("任务不存在", 404, "task_not_found")
-    data = {
-        "title": text(values.get("title")) or current["title"],
-        "description": text(values.get("description")),
-        "stage": clean_stage(values.get("stage"), current["stage"]),
-        "status": clean_task_status(values.get("status"), current["status"]),
-        "priority": clean_int(values.get("priority"), current["priority"], 0, 3),
-        "due_date": text(values.get("due_date")) or None,
-        "tags": _parse_tags(values.get("tags")),
-    }
+    data = _draft_changes(payload, values, current)
+    if "due_date" in data:
+        data["due_date"] = _utc_due(data["due_date"])
+    if "tags" in data:
+        data["tags"] = _parse_tags(data["tags"])
     add = _lines(values.get("add_subtasks"))
     if add:
         existing = [
@@ -1626,10 +1689,11 @@ def _apply_update_task(payload: dict, values: dict) -> dict:
             for s in current.get("subtasks") or []
         ]
         data["subtasks"] = existing + [{"title": line} for line in add]
-    update_task_record(task_id, data)
+    if data:
+        update_task_record(task_id, data)
     return {
         "task_id": task_id,
-        "title": data["title"],
+        "title": data.get("title", current["title"]),
         "project_id": current["project_id"],
         "project_name": current.get("project_name", ""),
         "added_subtasks": len(add),
@@ -1638,6 +1702,36 @@ def _apply_update_task(payload: dict, values: dict) -> dict:
 
 def _apply_delete_task(payload: dict, _values: dict) -> dict:
     return delete_task_record(text(payload.get("task_id")))
+
+
+def _draft_changes(payload: dict, values: dict, current: dict) -> dict:
+    """Apply only intended edits and reject changes to fields edited since drafting."""
+    baseline = payload.get("baseline")
+    if not isinstance(baseline, dict):
+        raise ApiError("这份旧草稿需要重新生成后再确认", 409, "action_stale")
+
+    def comparable(key, value):
+        if key == "priority":
+            return clean_int(value, 2, 0, 3)
+        if key == "tags":
+            return sorted(_parse_tags(value))
+        if key == "due_date":
+            return _local_dt(value)
+        return text(value)
+
+    changes = {}
+    for key, original in baseline.items():
+        desired = values.get(key, original)
+        if comparable(key, desired) == comparable(key, original):
+            continue
+        latest = comparable(key, current.get(key))
+        if latest not in (comparable(key, original), comparable(key, desired)):
+            raise ApiError(
+                f"字段 {key} 已在草稿生成后修改，请重新生成草稿",
+                409, "action_conflict",
+            )
+        changes[key] = desired
+    return changes
 
 
 def _apply_kind(kind: str, payload: dict, values: dict) -> dict:
@@ -2086,6 +2180,8 @@ def run_chat(
     for _round in range(MAX_ROUNDS):
         history = _api_history(conversation_id)
         messages = [{"role": "system", "content": build_system_prompt(context)}, *history]
+        # Release SQLite's writer lock before waiting for a remote model.
+        db.commit()
         try:
             data = chat_completion(cfg, messages, tools=tool_definitions())
         except ApiError as exc:

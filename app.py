@@ -48,6 +48,14 @@ def create_app(test_config: dict | None = None) -> Flask:
 
     register_blueprints(app)
 
+    @app.before_request
+    def validate_api_body():
+        if not request.path.startswith("/api/") or request.method not in {"POST", "PUT", "PATCH"}:
+            return
+        data = request.get_json(silent=True)
+        if request.get_data() and not isinstance(data, dict):
+            raise ApiError("请求内容必须是 JSON 对象", 400, "invalid_json")
+
     @app.context_processor
     def inject_constants():
         return {
@@ -115,7 +123,10 @@ def create_app(test_config: dict | None = None) -> Flask:
             get_db().execute("SELECT 1").fetchone()
         except Exception as exc:  # pragma: no cover - diagnostics only
             return jsonify({"ok": False, "error": str(exc)}), 500
-        return jsonify({"ok": True, "app": "TopoTash", "time": utcnow()})
+        return jsonify({
+            "ok": True, "app": "TopoTash", "time": utcnow(),
+            "database": str(Path(app.config["DATABASE"]).resolve()),
+        })
 
     # ----------------------------------------------------------------- errors
     @app.errorhandler(ApiError)

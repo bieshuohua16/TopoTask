@@ -446,7 +446,9 @@ def step_shortcut(args) -> Path | None:
     create_shortcut(
         link,
         target=sys.executable,
-        arguments=f'"{launcher}"',
+        arguments=subprocess.list2cmdline([
+            str(launcher), "--db", os.environ["TOPOTASH_DB"],
+        ]),
         workdir=ROOT,
         icon=icon,
     )

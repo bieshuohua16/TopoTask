@@ -12,6 +12,7 @@ from services import (
     nodes_with_links,
     project_dict,
     project_stats,
+    projects_stats,
     tasks_to_dicts,
     text,
 )
@@ -23,7 +24,8 @@ bp = Blueprint("views", __name__, url_prefix="/api/views")
 def overview():
     db = get_db()
     projects = db.execute("SELECT * FROM projects ORDER BY updated_at DESC").fetchall()
-    project_items = [project_dict(r, project_stats(r["id"])) for r in projects]
+    stats = projects_stats(r["id"] for r in projects)
+    project_items = [project_dict(r, stats[r["id"]]) for r in projects]
     tasks = db.execute("SELECT * FROM tasks").fetchall()
     task_count = len(tasks)
     done = sum(1 for t in tasks if t["status"] == "done")
@@ -131,10 +133,11 @@ def stage_board():
             }
         )
     projects = db.execute("SELECT * FROM projects ORDER BY updated_at DESC").fetchall()
+    stats = projects_stats(p["id"] for p in projects)
     return jsonify(
         {
             "stages": stages,
-            "projects": [project_dict(p, project_stats(p["id"])) for p in projects],
+            "projects": [project_dict(p, stats[p["id"]]) for p in projects],
             "include_done": include_done,
             "project_id": project_id or None,
         }

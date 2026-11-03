@@ -148,6 +148,7 @@
 
   document.addEventListener('tt:projects-changed', loadProjects);
   window.addEventListener('message', (ev) => {
+    if (ev.origin !== location.origin) return;
     if ((ev.data || {}).type === 'topotash:project-changed') loadProjects();
   });
   window.TT_shell = { loadProjects, projectForm };

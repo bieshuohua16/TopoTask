@@ -807,3 +807,13 @@ svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 1.7; stroke
   .page-head { flex-direction: column; align-items: flex-start; }
   .top-search { width: 200px; }
 }
+@media (max-width: 600px) {
+  .topbar {
+    height: auto; min-height: var(--topbar-h); flex-wrap: wrap;
+    padding: 10px 14px; gap: 8px;
+  }
+  .crumb { flex: 1; min-width: 0; white-space: nowrap; }
+  .crumb span:last-child { overflow: hidden; text-overflow: ellipsis; }
+  .topbar > button { flex: none; }
+  .top-search { order: 1; flex: 1 0 100%; width: 100%; }
+}

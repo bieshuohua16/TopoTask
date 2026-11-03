@@ -14,6 +14,7 @@ from services import (
     log_activity,
     merge_followup_into_content,
     nodes_with_links,
+    reconcile_node_tasks,
     sync_diagram_nodes,
     text,
 )
@@ -128,22 +129,27 @@ def list_diagrams():
     project_id = request.args.get("project_id")
     unbound = request.args.get("unbound") in ("1", "true", "yes")
     if unbound:
-        clauses.append("project_id IS NULL")
+        clauses.append("d.project_id IS NULL")
     elif project_id:
-        clauses.append("project_id=?")
+        clauses.append("d.project_id=?")
         args.append(project_id)
     q = text(request.args.get("q"))
     if q:
-        clauses.append("name LIKE ?")
+        clauses.append("d.name LIKE ?")
         args.append(f"%{q}%")
     where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-    rows = db.execute(f"SELECT * FROM diagrams {where} ORDER BY updated_at DESC", args).fetchall()
-    items = []
-    for r in rows:
-        d = _diagram_with_counts(r)
-        project = db.execute("SELECT name FROM projects WHERE id=?", (r["project_id"],)).fetchone()
-        d["project_name"] = project["name"] if project else ""
-        items.append(d)
+    rows = db.execute(
+        f"""SELECT d.id, d.project_id, d.name, d.kind, d.description, d.version,
+                   d.node_count, d.created_at, d.updated_at, COALESCE(p.name,'') AS project_name,
+                   (SELECT COUNT(*) FROM diagram_nodes n WHERE n.diagram_id=d.id
+                    AND n.followup_status IN ('todo','doing')) AS followup_count,
+                   (SELECT COUNT(DISTINCT task_id) FROM node_task_links l
+                    WHERE l.diagram_id=d.id) AS linked_task_count,
+                   (SELECT COUNT(*) FROM task_diagrams td WHERE td.diagram_id=d.id) AS task_link_count
+            FROM diagrams d LEFT JOIN projects p ON p.id=d.project_id
+            {where} ORDER BY d.updated_at DESC, d.id""", args,
+    ).fetchall()
+    items = [dict(row) for row in rows]
     return jsonify({"items": items, "total": len(items)})
 
 
@@ -562,20 +568,6 @@ def remove_node_link(diagram_id, node_key, task_id):
     )
     if cur.rowcount == 0:
         raise ApiError("关联不存在", 404, "link_not_found")
-    remaining = db.execute(
-        "SELECT t.status, l.is_primary FROM node_task_links l JOIN tasks t ON t.id=l.task_id"
-        " WHERE l.diagram_id=? AND l.node_key=? ORDER BY l.is_primary DESC LIMIT 1",
-        (diagram_id, node_key),
-    ).fetchone()
-    if remaining:
-        db.execute(
-            "UPDATE diagram_nodes SET followup_status=? WHERE diagram_id=? AND node_key=?",
-            (remaining["status"], diagram_id, node_key),
-        )
-    else:
-        db.execute(
-            "UPDATE diagram_nodes SET followup_status='none' WHERE diagram_id=? AND node_key=?",
-            (diagram_id, node_key),
-        )
+    reconcile_node_tasks(diagram_id, node_key)
     db.commit()
     return jsonify(_followup_node(diagram_id, node_key))

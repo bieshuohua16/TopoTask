@@ -6,7 +6,7 @@ the server.  Write operations are returned as drafts and applied through
 """
 from __future__ import annotations
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, Response, jsonify, request
 
 from services_ai import (
     apply_action,
@@ -20,6 +20,7 @@ from services_ai import (
     run_chat,
     save_ai_config,
     test_ai_connection,
+    topology_completion,
 )
 
 bp = Blueprint("ai", __name__, url_prefix="/api/ai")
@@ -75,6 +76,16 @@ def chat():
         data.get("context"),
     )
     return jsonify(result)
+
+
+@bp.post("/topology")
+def topology():
+    data = request.get_json(silent=True) or {}
+    return Response(
+        topology_completion(data.get("messages")),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @bp.post("/actions/<action_id>/confirm")

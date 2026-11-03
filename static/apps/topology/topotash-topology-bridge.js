@@ -17,6 +17,7 @@
   let saving = false;
   let pending = false;
   let saveTimer = null;
+  let revision = 0;
   let project = { projectId: PID, diagramId: DID, diagramName: '拓扑图', stage: 'research' };
   let tasks = [];
   let tasksLoading = false;
@@ -41,7 +42,7 @@
 
   function post(type, payload) {
     if (window.parent && window.parent !== window) {
-      window.parent.postMessage(Object.assign({ type }, payload || {}), '*');
+      window.parent.postMessage(Object.assign({ type }, payload || {}), location.origin);
     }
   }
 
@@ -129,15 +130,20 @@
 
   function scheduleServerSave(delay) {
     if (!booted) return;
+    state.dirty = true;
+    syncDocTitle();
     clearTimeout(saveTimer);
     saveTimer = setTimeout(() => saveToServer(false), delay == null ? 900 : delay);
   }
 
   async function saveToServer(manual) {
     if (!booted) return;
+    clearTimeout(saveTimer);
+    saveTimer = null;
     if (saving) { pending = true; return; }
     saving = true;
     pending = false;
+    const savedRevision = revision;
     post('topotash:visio-saving');
     try {
       const res = await api(`${BASE}/content`, {
@@ -150,8 +156,12 @@
           }
         }
       });
-      state.dirty = false;
+      state.dirty = revision !== savedRevision;
       syncDocTitle();
+      if (state.dirty) {
+        pending = true;
+        return;
+      }
       hint(`已保存 · ${res.node_count} 个节点 · ${new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`);
       post('topotash:visio-saved', { nodeCount: res.node_count, version: res.version });
       if (manual && typeof showToast === 'function') showToast('已保存到 TopoTash', 'success');
@@ -168,7 +178,15 @@
   // Replace the local download-based save with a server save.
   window.saveDoc = function () { saveToServer(true); };
   // The local draft is per-browser; in TopoTash the server is the source of truth.
-  window.scheduleAutosave = function () {};
+  window.scheduleAutosave = function () {
+    revision += 1;
+    scheduleServerSave();
+  };
+  window.addEventListener('beforeunload', (ev) => {
+    if (!state.dirty && !saving) return;
+    ev.preventDefault();
+    ev.returnValue = '';
+  });
 
   // ------------------------------------------------------------ JSON export
   // Export the live canvas in the same shape as the editor's .vweb.json so the
@@ -217,6 +235,7 @@
   }
   window.exportTopotashJson = exportJson;
   window.addEventListener('message', (ev) => {
+    if (ev.origin !== location.origin || ev.source !== window.parent) return;
     const msg = ev.data || {};
     if (msg.type === 'topotash:export-json') exportJson();
   });
@@ -237,12 +256,6 @@
     pop.appendChild(item);
   }
   installExportMenuItem();
-
-  const origCommit = window.commit;
-  window.commit = function () {
-    origCommit.apply(window, arguments);
-    scheduleServerSave();
-  };
 
   // ----------------------------------------------------------- node badges
   function shapeTt(shape) {
@@ -334,8 +347,15 @@
     if (tasksLoading) return;
     tasksLoading = true;
     try {
-      const data = await api(`/api/tasks?project_id=${encodeURIComponent(PID)}&limit=500`);
-      tasks = data.items || [];
+      const items = [];
+      let total;
+      do {
+        const data = await api(`/api/tasks?project_id=${encodeURIComponent(PID)}&limit=1000&offset=${items.length}`);
+        if (!data.items.length) break;
+        items.push(...data.items);
+        total = data.total;
+      } while (items.length < total);
+      tasks = items;
     } catch (e) { /* panel shows a hint */ }
     tasksLoading = false;
     decorateFollowupPanel();

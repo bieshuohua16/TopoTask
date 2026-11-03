@@ -76,7 +76,7 @@ def list_tasks():
     if request.args.get("order") == "updated":
         order = "updated_at DESC"
     rows = db.execute(
-        f"SELECT * FROM tasks {where} ORDER BY {order} LIMIT ? OFFSET ?", [*args, limit, offset]
+        f"SELECT * FROM tasks {where} ORDER BY {order}, id LIMIT ? OFFSET ?", [*args, limit, offset]
     ).fetchall()
     items = tasks_to_dicts(rows)
     return jsonify({"items": items, "total": total, "limit": limit, "offset": offset})
@@ -245,7 +245,7 @@ def set_tags(task_id):
     data = request.get_json(silent=True) or {}
     from services import _set_task_tags
 
-    _set_task_tags(task_id, task["project_id"], data.get("tags") or [])
+    _set_task_tags(task_id, task["project_id"], data.get("tags", []))
     db.execute("UPDATE tasks SET updated_at=? WHERE id=?", (utcnow(), task_id))
     db.commit()
     return jsonify(task_dict(task_id))

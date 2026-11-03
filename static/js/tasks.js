@@ -479,8 +479,18 @@
 
   // ---------------------------------------------------------------- data
   async function fetchTasks() {
-    const data = await TT.api(`/api/tasks?project_id=${encodeURIComponent(pid)}&limit=1000`);
-    tasks = data.items || [];
+    const my = ++seq;
+    const projectId = pid;
+    const items = [];
+    let total;
+    do {
+      const data = await TT.api(`/api/tasks?project_id=${encodeURIComponent(projectId)}&limit=1000&offset=${items.length}`);
+      if (my !== seq || projectId !== pid) return null;
+      if (!data.items.length) break;
+      items.push(...data.items);
+      total = data.total;
+    } while (items.length < total);
+    tasks = items;
     if (selectedId && !tasks.some(t => t.id === selectedId)) {
       selectedId = null;
       detail = null;
@@ -490,9 +500,7 @@
   }
 
   async function refreshTasks() {
-    const my = ++seq;
-    await fetchTasks();
-    if (my !== seq) return;
+    if (!await fetchTasks()) return;
     render();
   }
 

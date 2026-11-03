@@ -9,6 +9,7 @@
     python start_topotash.py --port 5050 # 换一个端口
     python start_topotash.py --debug     # 打开 Flask 调试模式
     python start_topotash.py --no-browser
+    python start_topotash.py --db D:\\data\\topotash.db
 """
 from __future__ import annotations
 
@@ -120,9 +121,12 @@ def _banner(port: int, debug: bool) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="启动 TopoTash 本地服务")
     parser.add_argument("--port", type=int, help=f"监听端口（默认 {DEFAULT_PORT}）")
+    parser.add_argument("--db", help="数据库文件路径")
     parser.add_argument("--debug", action="store_true", help="启用 Flask 调试模式")
     parser.add_argument("--no-browser", action="store_true", help="不自动打开浏览器")
     args = parser.parse_args(argv)
+    if args.db:
+        os.environ["TOPOTASH_DB"] = str(Path(args.db).expanduser().resolve())
 
     port = args.port or int(os.environ.get("TOPOTASH_PORT", DEFAULT_PORT))
     debug = args.debug or os.environ.get("TOPOTASH_DEBUG", "").lower() in {
@@ -150,6 +154,16 @@ def main(argv: list[str] | None = None) -> int:
 
     # 已有一个实例在运行：只打开浏览器，不重复启动。
     if _port_open(port):
+        if args.db:
+            try:
+                with _OPENER.open(f"{url}/healthz", timeout=2.0) as response:
+                    running = json.loads(response.read().decode("utf-8"))
+                expected = os.path.normcase(os.environ["TOPOTASH_DB"])
+                actual = os.path.normcase(str(Path(running.get("database", "")).resolve()))
+                if actual != expected:
+                    return _fail("该端口的实例使用其他数据库，请用 --port 指定另一个端口。")
+            except (OSError, ValueError):
+                return _fail(f"无法确认端口 {port} 上实例的数据库，请换一个端口启动。")
         if _wait_health(port, 4.0):
             print(f"\n       TopoTash 已经在运行：{url}", flush=True)
             if not args.no_browser:

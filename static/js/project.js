@@ -261,6 +261,7 @@
   document.addEventListener('tt:tasks-changed', () => { loadProject(); });
 
   window.addEventListener('message', (ev) => {
+    if (ev.origin !== location.origin) return;
     const msg = ev.data || {};
     if (msg.type === 'topotash:toast') TT.toast(msg.message, msg.level || 'success');
     if (msg.type === 'topotash:project-changed') loadProject();

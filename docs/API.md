@@ -11,7 +11,9 @@ ID：项目/任务/图纸为字符串（`p_` / `t_` / `d_` / `c_` 前缀），�
 { "error": { "code": "task_not_found", "message": "任务不存在：t_xxx" } }
 ```
 
-常见状态码：`200` 成功、`201` 创建、`400` 参数错误、`404` 资源不存在、`409`（预留）、`500` 服务端错误。
+常见状态码：`200` 成功、`201` 创建、`400` 参数错误、`404` 资源不存在、`409` 草稿冲突或已处理、`500` 服务端错误、`502/504` 模型服务失败或超时。
+
+`POST/PUT/PATCH /api/*` 的非空请求体必须是 JSON 对象；格式错误或传入数组、字符串、数字、`null` 时返回 `400 invalid_json`。
 
 ---
 
@@ -170,7 +172,7 @@ ID：项目/任务/图纸为字符串（`p_` / `t_` / `d_` / `c_` 前缀），�
 | `tag` | 标签名 |
 | `diagram_id` | 只返回关联该图纸的任务 |
 | `due` | `today/week/overdue/none` |
-| `limit` / `offset` | 分页，默认 200 / 0 |
+| `limit` / `offset` | 分页，默认 200 / 0，单页上限 1000；按响应的 `total` 继续翻页 |
 | `order` | `updated` 按更新时间，否则按状态+优先级+截止 |
 
 响应：
@@ -235,7 +237,7 @@ ID：项目/任务/图纸为字符串（`p_` / `t_` / `d_` / `c_` 前缀），�
 
 ### `DELETE /api/tasks/<task_id>`
 
-删除任务并级联删除子任务、标签关联、任务-图纸关联、节点-任务关联；若节点没有其它关联任务，角标重置为 `none`。
+删除任务并级联删除子任务、标签关联、任务-图纸关联、节点-任务关联。若删除的是节点主任务，自动提升一个剩余任务为主任务并同步角标；没有剩余任务时角标重置为 `none`。
 
 ### 子任务
 
@@ -463,7 +465,7 @@ DELETE /api/tasks/<task_id>/subtasks/<subtask_id>
 
 ### `DELETE /api/diagrams/<diagram_id>/nodes/<node_key>/links/<task_id>`
 
-删除关联，返回节点最新状态；若还有其它关联，角标跟随剩余任务状态，否则重置为 `none`。
+删除关联，返回节点最新状态。若删除的是主任务关联，自动提升一个剩余任务为主任务，角标跟随新主任务状态；没有剩余任务时重置为 `none`。
 
 ---
 
@@ -536,7 +538,7 @@ DELETE /api/tasks/<task_id>/subtasks/<subtask_id>
 
 ## 5. AI 助手
 
-AI 使用全局配置（不按项目区分），模型请求由 Flask 代理发出，浏览器拿不到 API Key。所有写操作只生成草稿，确认后才写库。
+全局助手与拓扑编辑器使用同一份全局配置（不按项目区分），模型请求由 Flask 代理发出，浏览器拿不到已保存的 API Key。项目和任务写操作只生成草稿，确认后才写库；编辑器绘图先预览，再由用户确认应用。
 
 ### `GET /api/ai/config`
 
@@ -631,6 +633,23 @@ AI 使用全局配置（不按项目区分），模型请求由 Flask 代理发�
 - 读工具：`list_projects / get_project / portfolio_summary / list_tasks / get_task / search`。
 - 写工具：`create_project / update_project / delete_project / create_task / update_task / delete_task`，只返回草稿，不写业务表。
 
+### `POST /api/ai/topology`
+
+```json
+{
+  "messages": [
+    { "role": "system", "content": "绘图规则，要求输出 JSON" },
+    { "role": "user", "content": "画一台路由器" }
+  ]
+}
+```
+
+供拓扑编辑器使用。`messages` 必须是 1–42 条消息的数组，每条包含 `system/user/assistant` 之一的 `role` 和文本 `content`。每次请求读取最新全局 `api_base/model/api_key/temperature`，忽略客户端指定的模型或密钥；本地模型可不配置 Key。
+
+成功返回 `Content-Type: text/event-stream`，转发模型的 `data: {"choices":[{"delta":{"content":"..."}}]}` 事件和 `data: [DONE]`。模型需支持流式 Chat Completions 和 `response_format: {"type":"json_object"}`。绘图系统提示词与画布摘要由编辑器提供；全局助手的业务系统提示词不用于绘图。
+
+请求参数错误返回 `400 invalid_messages`，未配置模型返回 `400 ai_not_configured`，上游连接失败或超时在流开始前返回 JSON 错误。流开始后的网络错误通过 `data: {"error":{"message":"..."}}` 提示；浏览器关闭连接时释放上游响应。
+
 ### `POST /api/ai/actions/<id>/confirm`
 
 ```json
@@ -639,6 +658,8 @@ AI 使用全局配置（不按项目区分），模型请求由 Flask 代理发�
 ```
 
 `values` 可覆盖草稿字段（用户在卡片里修改）。草稿只能应用一次；重复确认返回 409。`POST /api/ai/actions/<id>/cancel` 取消草稿。
+
+修改草稿只应用相对于生成时快照的字段变化，保留其他手动修改。目标字段在此后发生冲突时返回 `409 action_conflict`，草稿仍为待确认状态；缺少快照的旧修改草稿返回 `409 action_stale`，需要重新生成。AI 截止时间按 UTC 保存，表单按浏览器本地时间显示，未修改时保留原时间精度。
 
 ---
 

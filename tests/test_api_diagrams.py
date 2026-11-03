@@ -474,7 +474,7 @@ class DiagramApiTest(ApiTestCase):
         removed = self.api(
             "DELETE", f"/api/diagrams/{diagram['id']}/nodes/n1/links/{second['id']}"
         )
-        self.assertEqual(removed["primary_task"], None)
+        self.assertEqual(removed["primary_task"]["task_id"], first["id"])
         self.assertEqual(removed["followup_status"], "todo")  # falls back to the remaining task
 
         self.api("DELETE", f"/api/diagrams/{diagram['id']}/nodes/n1/links/{first['id']}")
