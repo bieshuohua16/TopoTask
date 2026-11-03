@@ -127,5 +127,6 @@
     btn.onclick = () => window.TT_shell && window.TT_shell.projectForm(null);
   });
   document.addEventListener('tt:project-saved', load);
+  document.addEventListener('tt:tasks-changed', load);
   load();
 })();

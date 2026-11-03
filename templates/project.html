@@ -91,12 +91,55 @@
 </section>
 
 <section class="tab-panel hidden" id="panel-tasks">
-  <div class="embed-head">
-    <div class="embed-title"><b>任务台</b><span>内置任务台：列表 / 看板、子任务、标签、AI 助手</span></div>
-    <button class="btn btn-ghost btn-sm" id="btnOpenTodo">在新标签页打开</button>
-  </div>
-  <div class="iframe-wrap" id="todoWrap">
-    <div class="iframe-loading"><span class="spinner"></span>正在加载任务台…</div>
+  <div class="task-workbench">
+    <div class="task-main">
+      <div class="task-toolbar">
+        <div class="view-seg" id="taskViewSeg">
+          <button data-view="list" class="active" type="button">列表</button>
+          <button data-view="board" type="button">看板</button>
+        </div>
+        <div class="task-filters">
+          <select class="select select-sm" id="taskStageFilter" aria-label="按阶段筛选">
+            <option value="all">全部阶段</option>
+            <option value="research">需求调研</option>
+            <option value="proposal">方案编写</option>
+            <option value="poc">POC 验证</option>
+            <option value="bidding">招投标</option>
+          </select>
+          <select class="select select-sm" id="taskStatusFilter" aria-label="按状态筛选">
+            <option value="all">全部状态</option>
+            <option value="todo">待办</option>
+            <option value="doing">进行中</option>
+            <option value="done">已完成</option>
+          </select>
+          <div class="task-search">
+            <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input id="taskSearch" placeholder="搜索任务、标签" autocomplete="off">
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" id="btnNewTask" type="button">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14"/></svg>
+          新建任务
+        </button>
+        <button class="btn btn-ghost btn-sm tt-ai-btn" id="btnClassicTasks" type="button" title="AI 助手（当前项目）">AI</button>
+      </div>
+      <div class="task-summary" id="taskSummary"></div>
+      <div class="task-list-pane" id="taskListPane">
+        <div class="task-loading"><span class="spinner"></span>正在加载任务…</div>
+      </div>
+      <div class="tt-board hidden" id="taskBoardPane"></div>
+    </div>
+
+    <aside class="task-drawer" id="taskDrawer">
+      <div class="task-drawer-empty" id="taskDrawerEmpty">
+        <div class="ttd-empty-icon">
+          <svg viewBox="0 0 48 48" fill="none"><rect x="8" y="8" width="32" height="32" rx="6"/><path d="M16 20h16M16 27h10"/></svg>
+        </div>
+        <h3>选择一个任务</h3>
+        <p>查看子任务、标签、关联拓扑图，<br>以及由拓扑节点跟进创建的任务。</p>
+      </div>
+      <div id="taskDetail" class="task-detail hidden"></div>
+    </aside>
   </div>
 </section>
 
@@ -128,5 +171,6 @@
 <script>
 window.TT_PROJECT = {{ project|tojson }};
 </script>
+<script src="{{ url_for('static', filename='js/tasks.js') }}"></script>
 <script src="{{ url_for('static', filename='js/project.js') }}"></script>
 {% endblock %}

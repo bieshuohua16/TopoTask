@@ -5,11 +5,10 @@ from flask import Blueprint, jsonify, request
 
 from db import ApiError, get_db, new_id, utcnow
 from services import (
-    STAGE_LABELS,
     clean_int,
     create_task_record,
+    delete_task_record,
     ensure_project,
-    sync_node_status_for_task,
     task_dict,
     tasks_to_dicts,
     text,
@@ -134,26 +133,9 @@ def patch_task(task_id):
 
 @bp.delete("/<task_id>")
 def delete_task(task_id):
-    db = get_db()
-    row = db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
-    if not row:
-        raise ApiError(f"任务不存在：{task_id}", 404, "task_not_found")
-    diagrams = db.execute(
-        "SELECT DISTINCT diagram_id, node_key FROM node_task_links WHERE task_id=?", (task_id,)
-    ).fetchall()
-    db.execute("DELETE FROM tasks WHERE id=?", (task_id,))
-    for link in diagrams:
-        remaining = db.execute(
-            "SELECT 1 FROM node_task_links WHERE diagram_id=? AND node_key=? LIMIT 1",
-            (link["diagram_id"], link["node_key"]),
-        ).fetchone()
-        if not remaining:
-            db.execute(
-                "UPDATE diagram_nodes SET followup_status='none' WHERE diagram_id=? AND node_key=?",
-                (link["diagram_id"], link["node_key"]),
-            )
-    db.commit()
-    return jsonify({"deleted": True, "id": task_id})
+    result = delete_task_record(task_id)
+    get_db().commit()
+    return jsonify(result)
 
 
 # ---------------------------------------------------------------------------

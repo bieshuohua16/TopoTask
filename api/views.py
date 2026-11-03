@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
 
-from db import get_db, load_json
+from db import get_db, utcnow
 from services import (
     STAGE_HINTS,
     STAGE_LABELS,
@@ -30,7 +30,7 @@ def overview():
     overdue = sum(
         1
         for t in tasks
-        if t["status"] != "done" and t["due_date"] and t["due_date"] < _now_iso()
+        if t["status"] != "done" and t["due_date"] and t["due_date"] < utcnow()
     )
     diagrams = db.execute("SELECT COUNT(*) AS n FROM diagrams").fetchone()["n"]
     followups = db.execute(
@@ -97,12 +97,6 @@ def overview():
             "stages": [{"key": k, "label": STAGE_LABELS[k], "hint": STAGE_HINTS[k]} for k in STAGES],
         }
     )
-
-
-def _now_iso() -> str:
-    from db import utcnow
-
-    return utcnow()
 
 
 @bp.get("/stage-board")

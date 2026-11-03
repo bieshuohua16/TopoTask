@@ -6,6 +6,7 @@
   <title>{% block title %}TopoTash 拓事{% endblock %}</title>
   <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/topotash.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/ai.css') }}">
 </head>
 <body data-page="{% block page %}{% endblock %}">
 <div class="shell">
@@ -62,6 +63,11 @@
         <kbd>/</kbd>
         <div class="search-pop" id="searchPop"></div>
       </div>
+      <button class="btn btn-ghost ai-trigger" id="btnAiAssistant" type="button" title="AI 助手（Ctrl+K）">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z"/><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2Z"/></svg>
+        <span>AI 助手</span>
+        <kbd>Ctrl K</kbd>
+      </button>
       <button class="btn btn-primary" id="topNewProject">
         <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14"/></svg>
         新建项目
@@ -89,6 +95,7 @@ window.TT_CONFIG = {
 </script>
 <script src="{{ url_for('static', filename='js/api.js') }}"></script>
 <script src="{{ url_for('static', filename='js/shell.js') }}"></script>
+<script src="{{ url_for('static', filename='js/ai.js') }}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>

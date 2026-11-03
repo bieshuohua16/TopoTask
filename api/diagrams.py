@@ -3,8 +3,9 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
 
-from db import ApiError, dumps, get_db, load_json, new_id, utcnow
+from db import ApiError, dumps, get_db, new_id, utcnow
 from services import (
+    content_of,
     create_task_record,
     diagram_dict,
     ensure_project,
@@ -157,7 +158,7 @@ def delete_diagram(diagram_id):
 @bp.get("/<diagram_id>/content")
 def get_content(diagram_id):
     row = _get_diagram(diagram_id)
-    content = load_json(row["content_json"], dict(EMPTY_CONTENT))
+    content = content_of(row)
     content = merge_followup_into_content(diagram_id, content)
     project = get_db().execute("SELECT * FROM projects WHERE id=?", (row["project_id"],)).fetchone()
     content["_topotash"] = {

@@ -3,53 +3,31 @@ from __future__ import annotations
 
 from flask import Blueprint, jsonify, request
 
-from db import ApiError, get_db, load_json, new_id, utcnow
+from db import dumps, get_db, load_json, new_id, utcnow
 from services import (
     STAGES,
     STAGE_HINTS,
     STAGE_LABELS,
     STATUSES,
     STATUS_LABELS,
+    clean_project_payload,
     clean_stage,
     clean_status,
+    create_project_record,
     create_task_record,
+    delete_project_record,
     diagram_dict,
     ensure_project,
-    log_activity,
-    nodes_with_links,
     project_dict,
     project_stats,
     tasks_to_dicts,
     text,
     todo_state,
+    update_project_record,
     update_task_record,
 )
 
 bp = Blueprint("projects", __name__, url_prefix="/api/projects")
-
-PROJECT_FIELDS = {
-    "name", "code", "customer", "industry", "owner", "stage", "status",
-    "description", "color", "start_date", "end_date",
-}
-
-
-def _project_payload(data: dict, partial: bool = False) -> dict:
-    out = {}
-    for key in PROJECT_FIELDS:
-        if key in data:
-            out[key] = data[key]
-    if "name" in out:
-        out["name"] = text(out["name"])
-    for key in ("code", "customer", "industry", "owner", "description"):
-        if key in out:
-            out[key] = text(out[key])
-    if "stage" in out:
-        out["stage"] = clean_stage(out["stage"])
-    if "status" in out:
-        out["status"] = clean_status(out["status"])
-    if not partial and not out.get("name"):
-        raise ApiError("项目名称不能为空", 400, "name_required")
-    return out
 
 
 @bp.get("")
@@ -95,47 +73,16 @@ def _followup_nodes(project_id: str, limit: int = 50) -> list[dict]:
            ORDER BY dn.synced_at DESC LIMIT ?""",
         (project_id, limit),
     ).fetchall()
-    out = []
-    for r in rows:
-        d = dict(r)
-        d["diagram_name"] = r["diagram_name"]
-        d["tasks"] = []
-        out.append(d)
-    return out
+    return [dict(r) for r in rows]
 
 
 @bp.post("")
 def create_project():
     data = request.get_json(silent=True) or {}
-    fields = _project_payload(data)
-    pid = new_id("p_")
-    now = utcnow()
-    fields.setdefault("color", "#5b6cf0")
-    fields.setdefault("stage", "research")
-    fields.setdefault("status", "active")
-    fields.setdefault("description", "")
-    db = get_db()
-    db.execute(
-        """INSERT INTO projects
-           (id, name, code, customer, industry, owner, stage, status, description, color,
-            start_date, end_date, todo_config, metadata, created_at, updated_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?, '{}', '{}', ?, ?)""",
-        (
-            pid, fields["name"], fields.get("code"), fields.get("customer"),
-            fields.get("industry"), fields.get("owner"), fields["stage"], fields["status"],
-            fields.get("description", ""), fields.get("color"), fields.get("start_date"),
-            fields.get("end_date"), now, now,
-        ),
-    )
-    # 每个项目默认带一个任务分类，任务台的「项目」下拉才有可选项
-    db.execute(
-        "INSERT INTO task_categories(id, project_id, name, color, sort_order, created_at)"
-        " VALUES (?,?,?,?,?,?)",
-        (new_id("c_"), pid, "默认分类", "#6366f1", 0, now),
-    )
-    log_activity(pid, "project", pid, "create", fields["name"])
-    db.commit()
-    row = db.execute("SELECT * FROM projects WHERE id=?", (pid,)).fetchone()
+    fields = clean_project_payload(data)
+    pid = create_project_record(fields)
+    get_db().commit()
+    row = get_db().execute("SELECT * FROM projects WHERE id=?", (pid,)).fetchone()
     return jsonify(project_dict(row, project_stats(pid))), 201
 
 
@@ -172,26 +119,17 @@ def get_project(project_id):
 def patch_project(project_id):
     ensure_project(project_id)
     data = request.get_json(silent=True) or {}
-    fields = _project_payload(data, partial=True)
-    if not fields:
-        raise ApiError("没有要更新的字段", 400, "empty_patch")
-    fields["updated_at"] = utcnow()
-    sets = ", ".join(f"{k}=?" for k in fields)
-    db = get_db()
-    db.execute(f"UPDATE projects SET {sets} WHERE id=?", [*fields.values(), project_id])
-    log_activity(project_id, "project", project_id, "update", ", ".join(fields.keys()))
-    db.commit()
-    row = db.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
-    return jsonify(project_dict(row, project_stats(project_id)))
+    fields = clean_project_payload(data, partial=True)
+    project = update_project_record(project_id, fields)
+    get_db().commit()
+    return jsonify(project)
 
 
 @bp.delete("/<project_id>")
 def delete_project(project_id):
-    project = ensure_project(project_id)
-    db = get_db()
-    db.execute("DELETE FROM projects WHERE id=?", (project_id,))
-    db.commit()
-    return jsonify({"deleted": True, "id": project_id, "name": project["name"]})
+    result = delete_project_record(project_id)
+    get_db().commit()
+    return jsonify(result)
 
 
 # ---------------------------------------------------------------------------
@@ -319,11 +257,10 @@ def put_todo_state(project_id):
         config["aiConfig"] = data.get("aiConfig") or {}
     if "aiChatHistory" in data:
         config["aiChatHistory"] = data.get("aiChatHistory") or []
-    import json as _json
 
     db.execute(
         "UPDATE projects SET todo_config=?, updated_at=? WHERE id=?",
-        (_json.dumps(config, ensure_ascii=False), now, project_id),
+        (dumps(config), now, project_id),
     )
     db.commit()
     return jsonify(todo_state(project_id)), 200

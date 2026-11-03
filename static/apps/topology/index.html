@@ -7275,17 +7275,11 @@ module.exports = Worker;
     <!-- 文件 -->
     <div class="tb-group">
       <details class="menu" id="fileMenu">
-        <summary><span class="btn" style="border:none;">文件<svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M1 1l4 4 4-4"/></svg></span></summary>
+        <summary><span class="btn" style="border:none;">导出<svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M1 1l4 4 4-4"/></svg></span></summary>
         <div class="menu-pop">
-          <div class="mi" data-act="new">新建文档<span class="kbd">Ctrl+N</span></div>
-          <div class="mi" data-act="open">打开…<span class="kbd">Ctrl+O</span></div>
-          <div class="mi" data-act="save">保存文档<span class="kbd">Ctrl+S</span></div>
-          <div class="sep"></div>
           <div class="mi" data-act="exportPng">导出 PNG 图片</div>
           <div class="mi" data-act="exportSvg">导出 SVG 矢量图</div>
           <div class="mi" data-act="exportFragment">导出交互片段（reveal.js）</div>
-          <div class="sep"></div>
-          <div class="mi" data-act="sample">加载示例拓扑</div>
         </div>
       </details>
     </div>
@@ -7426,7 +7420,7 @@ module.exports = Worker;
           <div class="steps">
             · 点击左侧<b>图形模具</b>，再点击画布即可放置<br>
             · 选择<b>连接线</b>后，点击图形再点击图形即可连线<br>
-            · 按 <b>?</b> 查看全部快捷键 · 画布内容会自动保存在本地
+            · 按 <b>?</b> 查看全部快捷键 · 画布内容会自动保存到 TopoTash
           </div>
         </div>
       </div>
@@ -7537,9 +7531,8 @@ module.exports = Worker;
         </div>
       </div>
       <div class="sc-group">
-        <div class="sc-group-title">文件</div>
+        <div class="sc-group-title">面板</div>
         <div class="shortcut-grid">
-          <div class="shortcut-row"><span>新建 / 打开 / 保存文档</span><span class="key">Ctrl+N / O / S</span></div>
           <div class="shortcut-row"><span>折叠 / 展开左侧面板</span><span class="key">Ctrl+B</span></div>
           <div class="shortcut-row"><span>折叠 / 展开右侧面板</span><span class="key">Ctrl+Shift+B</span></div>
         </div>
@@ -10930,13 +10923,9 @@ function contentBBox(){
 document.querySelectorAll('#fileMenu .mi').forEach(mi=>{
   mi.addEventListener('click', ()=>{
     const act=mi.dataset.act;
-    if (act==='new') newDoc();
-    else if (act==='open') openDoc();
-    else if (act==='save') saveDoc();
-    else if (act==='exportPng') exportPng();
+    if (act==='exportPng') exportPng();
     else if (act==='exportSvg') exportSvg();
     else if (act==='exportFragment') exportFragment();
-    else if (act==='sample') loadSample();
     $('#fileMenu').removeAttribute('open');
   });
 });
@@ -11009,9 +10998,11 @@ document.addEventListener('keydown', e=>{
     if (k==='v'){ e.preventDefault(); pasteClipboard(); return; }
     if (k==='x'){ e.preventDefault(); copySelection(); deleteSelection(); return; }
     if (k==='d'){ e.preventDefault(); duplicateSelection(); return; }
-    if (k==='s'){ e.preventDefault(); saveDoc(); return; }
-    if (k==='o'){ e.preventDefault(); openDoc(); return; }
-    if (k==='n'){ e.preventDefault(); newDoc(); return; }
+    if (k==='s' || k==='o' || k==='n'){
+      e.preventDefault();
+      showToast('画布会自动保存到 TopoTash，无需新建 / 打开 / 保存文件', 'info');
+      return;
+    }
     if (k==='b'){ e.preventDefault();
       if (e.shiftKey) setRightCollapsed(!$('#right').classList.contains('collapsed'));   // U5: Ctrl+Shift+B 折叠右侧面板
       else setLeftCollapsed(!$('#left').classList.contains('collapsed'));

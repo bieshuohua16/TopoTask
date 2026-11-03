@@ -65,5 +65,7 @@
 
   projectSel.onchange = load;
   doneToggle.onchange = load;
+  document.addEventListener('tt:project-saved', () => location.reload());
+  document.addEventListener('tt:tasks-changed', load);
   init();
 })();

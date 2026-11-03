@@ -505,7 +505,115 @@ DELETE /api/tasks/<task_id>/subtasks/<subtask_id>
 
 ---
 
-## 5. 调用示例
+## 5. AI 助手
+
+AI 使用全局配置（不按项目区分），模型请求由 Flask 代理发出，浏览器拿不到 API Key。所有写操作只生成草稿，确认后才写库。
+
+### `GET /api/ai/config`
+
+```json
+{
+  "api_base": "https://api.deepseek.com/v1",
+  "model": "deepseek-chat",
+  "temperature": 0.7,
+  "system_prompt": "",
+  "api_key_set": true,
+  "api_key_hint": "••••1234",
+  "configured": true,
+  "presets": [{"key": "deepseek", "label": "DeepSeek", "api_base": "...", "model": "deepseek-chat"}]
+}
+```
+
+`api_key` 永远不会返回；`configured` 为 `true` 时才能聊天。
+
+### `PUT /api/ai/config`
+
+```json
+{
+  "api_base": "https://api.deepseek.com/v1",
+  "api_key": "sk-...",       // 留空 / 不传 = 保持原 Key；clear_key=true 清空
+  "model": "deepseek-chat",
+  "temperature": 0.7,
+  "system_prompt": ""
+}
+```
+
+返回同 `GET`。缺少 `api_base` / `model` 返回 400。
+
+### `POST /api/ai/test`
+
+```json
+{ "api_base": "https://api.deepseek.com/v1", "api_key": "sk-...", "model": "deepseek-chat" }
+→ { "ok": true, "model": "deepseek-chat", "reply": "OK" }
+```
+
+失败时返回 `{ "ok": false, "error": "..." }`（HTTP 200，便于设置弹窗内联展示）。
+
+### `GET /api/ai/conversations`
+
+```json
+{ "items": [{ "id": "cv_xxx", "title": "新建一个 POC 项目", "project_id": "p_xxx",
+              "project_name": "XX 银行", "message_count": 6,
+              "created_at": "...", "updated_at": "..." }] }
+```
+
+`POST /api/ai/conversations` 可传 `{"project_id": "p_xxx"}`；`DELETE /api/ai/conversations/<id>` 删除会话及其消息、草稿。
+
+### `GET /api/ai/conversations/<id>`
+
+```json
+{
+  "conversation": { "id": "cv_xxx", "title": "..." },
+  "messages": [
+    { "id": 1, "role": "user", "content": "帮我建一个项目", "meta": {} },
+    { "id": 2, "role": "assistant", "content": "", "tool_calls": [ ... ] },
+    { "id": 3, "role": "tool", "name": "create_project", "content": "{...}" },
+    { "id": 4, "role": "assistant", "content": "已生成草稿，请确认。" }
+  ],
+  "actions": [ { "id": "a_xxx", "kind": "create_project", "status": "pending",
+                 "title": "新建项目「...」", "form": [ ... ], "values": { ... },
+                 "summary": ["客户：..."], "warning": "" } ]
+}
+```
+
+### `POST /api/ai/chat`
+
+```json
+{
+  "conversation_id": "cv_xxx",              // 可空，空则新建
+  "message": "帮我新建一个售前项目",
+  "context": { "page": "project", "project_id": "p_xxx" }
+}
+```
+
+返回本次新增的消息与草稿：
+
+```json
+{
+  "ok": true,
+  "conversation": { "id": "cv_xxx", "title": "..." },
+  "messages": [ { "role": "user", "content": "..." }, { "role": "assistant", "content": "..." } ],
+  "actions": [ { "id": "a_xxx", "kind": "create_project", "status": "pending" } ]
+}
+```
+
+- `ok=false` 时带 `error`；未配置模型时 `need_config=true`。
+- 服务端最多执行 6 轮工具调用。
+- 读工具：`list_projects / get_project / portfolio_summary / list_tasks / get_task / search`。
+- 写工具：`create_project / update_project / delete_project / create_task / update_task / delete_task`，只返回草稿，不写业务表。
+
+### `POST /api/ai/actions/<id>/confirm`
+
+```json
+{ "values": { "name": "XX 银行 POC", "stage": "poc", "starter_tasks": "POC 验证 | 确认环境" } }
+→ { "action": { "id": "a_xxx", "status": "applied", "result": { "project_id": "p_xxx", "task_count": 2 } } }
+```
+
+`values` 可覆盖草稿字段（用户在卡片里修改）。草稿只能应用一次；重复确认返回 409。`POST /api/ai/actions/<id>/cancel` 取消草稿。
+
+---
+
+## 6. 调用示例
 
 ```bash
 # 新建项目
@@ -529,6 +637,21 @@ curl -X POST http://127.0.0.1:5000/api/diagrams/d_xxx/nodes/n4/followup \
 
 # 阶段看板
 curl "http://127.0.0.1:5000/api/views/stage-board?include_done=1"
+
+# 配置 AI（一次即可，全局生效）
+curl -X PUT http://127.0.0.1:5000/api/ai/config \
+  -H "Content-Type: application/json" \
+  -d '{"api_base":"https://api.deepseek.com/v1","api_key":"sk-...","model":"deepseek-chat"}'
+
+# 发起对话（会返回草稿 action）
+curl -X POST http://127.0.0.1:5000/api/ai/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message":"帮我新建一个 XX 银行 POC 项目","context":{"page":"dashboard"}}'
+
+# 确认草稿
+curl -X POST http://127.0.0.1:5000/api/ai/actions/a_xxx/confirm \
+  -H "Content-Type: application/json" \
+  -d '{"values":{"name":"XX 银行 POC","stage":"poc"}}'
 ```
 
 PowerShell 里用 `Invoke-RestMethod` 时注意 UTF-8；建议用 `-ContentType 'application/json; charset=utf-8'` 并传 UTF-8 字节。

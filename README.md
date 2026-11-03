@@ -5,17 +5,26 @@
 TopoTash 是一个自带后端的完整 Web 应用。每个项目下有多个任务和多张拓扑图；任务可以关联图纸，拓扑图节点可以标记「待跟进」并直接创建或跳转到任务；所有视图都可以按售前阶段聚合。
 
 - 项目总览、阶段看板、拓扑图库、项目工作台
-- 任务台：列表 / 看板、优先级、子任务、标签、循环任务、搜索、AI 助手
-- 拓扑编辑器：系统架构图、逻辑拓扑、POC 部署图，节点级任务联动
+- 原生任务台：按售前阶段分组的列表、状态看板、优先级、子任务、标签、搜索、任务↔图纸↔节点关联
+- 全局 AI 助手：一处配置 OpenAI 兼容 API，向导式新建项目、管理任务；所有写入先生成草稿，确认后执行
+- 拓扑编辑器：系统架构图、逻辑拓扑、POC 部署图，节点级任务联动；只保留 PNG / SVG / reveal.js 片段三种导出，画布自动保存到 TopoTash
 - SQLite 持久化，数据全部落在项目根目录，离线可用
 
 ![项目总览](docs/screenshots/01-dashboard.png)
 
 ## 界面预览
 
-| 阶段看板 | 项目工作台（任务） |
+| 阶段看板 | 项目工作台（任务列表） |
 |---|---|
-| ![阶段看板](docs/screenshots/02-board.png) | ![任务台](docs/screenshots/04-project-tasks.png) |
+| ![阶段看板](docs/screenshots/02-board.png) | ![原生任务台](docs/screenshots/04-project-tasks.png) |
+
+| 任务详情 | 任务看板 |
+|---|---|
+| ![任务详情](docs/screenshots/04b-task-detail.png) | ![任务看板](docs/screenshots/04c-task-board.png) |
+
+| 项目概览 | 拓扑图库 |
+|---|---|
+| ![项目概览](docs/screenshots/03-project-overview.png) | ![拓扑图库](docs/screenshots/05-project-diagrams.png) |
 
 | 拓扑编辑器（节点跟进） | 关联视图 |
 |---|---|
@@ -43,6 +52,25 @@ python app.py
 
 > 本应用没有登录与权限控制，默认只监听 `127.0.0.1`，请勿直接暴露到公网。
 
+## 测试
+
+测试只用标准库 `unittest`，不需要额外依赖；每个用例都会新建临时 SQLite 数据库，不会读写 `topotash.db`。
+
+```bash
+python -m unittest discover -s tests -t . -v
+```
+
+覆盖范围：
+
+- 项目 / 任务 / 拓扑图的增删改查、过滤、级联删除与错误响应
+- 原生任务台的标签、子任务、任务↔图纸关联、任务台全量状态桥接
+- 画布保存、节点索引同步、节点跟进状态、节点↔任务主任务联动
+- 总览 / 阶段看板 / 关联视图 / 全局搜索、页面路由、静态资源与 JSON 错误格式
+- 示例数据、历史任务/画布 JSON 迁移、`init-db` / `seed-demo` CLI
+- AI 配置校验、密钥掩码、工具循环、草稿确认/取消/并发保护（模型调用用替身，不联网）
+
+真实模型联调：启动服务后打开「AI 助手 → 设置」填写 Base、Key、模型并点「测试连接」，或直接调用 `POST /api/ai/test`。Key 只写入本地 `app_settings` 表（`topotash.db` 已被 `.gitignore` 排除），不会出现在代码或页面里。
+
 ## 功能地图
 
 | 页面 | 路径 | 说明 |
@@ -53,17 +81,20 @@ python app.py
 | 项目工作台 | `/projects/<id>` | 概览 / 任务 / 拓扑图 / 关联视图 四个标签页 |
 | 拓扑编辑器 | `/projects/<id>/diagrams/<did>` | 全屏画布，自动保存到 SQLite |
 
+任意页面都可以点击顶部「AI 助手」或按 `Ctrl+K` 打开全局抽屉：对话、项目/任务草稿、确认执行都在这里，不再跳转旧版任务台。
+
 ## 架构说明
 
 TopoTash 由一个 Flask 应用统一托管：
 
 - **Shell**：Jinja 页面骨架 + 原生 JS，负责项目导航、总览、阶段看板与项目工作台。
-- **内置任务台**：自包含的单文件前端模块，通过桥接脚本接入项目级 API，保留完整交互。
-- **内置拓扑编辑器**：自包含的 SVG 编辑器，通过桥接脚本保存画布 JSON，并在属性面板与节点上提供任务联动。
-- **桥接层**：同源 `fetch` 调用 REST API，`postMessage` 在 iframe 与父页面之间传递保存状态、任务跳转等事件。
+- **原生任务台**：`static/js/tasks.js` + REST API，按项目/阶段直接读写 `tasks` 表，不再嵌套旧 TodoFlow 页面。
+- **全局 AI 助手**：`static/js/ai.js` + `api/ai.py` + `services_ai.py`。浏览器只和本机 Flask 通信，模型 Key 不进入浏览器；读工具直接查库，写工具只生成 `ai_actions` 草稿，用户确认后才通过服务层落库。
+- **拓扑编辑器**：自包含的 SVG 编辑器，通过桥接脚本保存画布 JSON，并在属性面板与节点上提供任务联动。
+- **桥接层**：拓扑编辑器通过同源 `fetch` 调用 REST API，`postMessage` 向父页面传递保存状态与打开任务事件。
 - **数据层**：Flask + sqlite3 标准库，无 ORM；`schema.sql` 是唯一建表来源。
 
-任务台与拓扑编辑器都是原生 JS、零框架依赖，不需要 Vue/React 适配层，也没有前端构建步骤。
+任务台使用 TopoTash 自己的项目、阶段与关联模型；拓扑编辑器是唯一保留 iframe 的复杂画布模块。两者都是原生 JS、零框架依赖，不需要 Vue/React 适配层，也没有前端构建步骤。
 
 ## 目录结构
 
@@ -72,14 +103,16 @@ TopoTash/
 ├── app.py                      # Flask 入口、页面路由、CLI（init-db / seed-demo）
 ├── db.py                       # SQLite 连接、事务、通用工具
 ├── schema.sql                  # 全部建表语句（含索引、外键、CHECK）
-├── services.py                 # 领域服务：序列化、任务/节点同步、任务台状态
+├── services.py                 # 领域服务：项目/任务/节点同步、经典任务台状态
+├── services_ai.py              # AI：全局配置、模型客户端、工具定义、Agent 循环、草稿动作
 ├── topotash.db                 # 运行时数据库（init-db 生成）
 ├── api/
 │   ├── __init__.py
-│   ├── projects.py             # 项目 + 任务台全量状态同步
+│   ├── projects.py             # 项目 + 经典任务台全量状态同步
 │   ├── tasks.py                # 任务、子任务、标签、任务↔拓扑图
 │   ├── diagrams.py             # 图纸内容、节点索引、节点跟进/关联
-│   └── views.py                # 总览、阶段看板、关联视图、全局搜索
+│   ├── views.py                # 总览、阶段看板、关联视图、全局搜索
+│   └── ai.py                   # AI 配置、会话、对话、草稿确认
 ├── templates/                  # Jinja 页面骨架
 │   ├── base.html
 │   ├── dashboard.html
@@ -89,8 +122,21 @@ TopoTash/
 │   └── editor.html
 ├── static/
 │   ├── css/topotash.css
-│   ├── js/                     # shell / dashboard / board / project / editor
-│   └── apps/                   # 内置任务台、内置拓扑编辑器与桥接脚本
+│   ├── css/ai.css              # 全局 AI 抽屉与草稿卡片
+│   ├── js/                     # shell / dashboard / board / project / tasks / editor / ai
+│   └── apps/
+│       ├── topology/           # 内置拓扑编辑器 + 桥接
+│       └── tasks/              # 旧版任务台兼容页（不再有入口，仅供旧数据回看）
+├── tests/                      # unittest 全量测试（临时数据库，不碰 topotash.db）
+│   ├── support.py              # 测试用临时库与请求辅助
+│   ├── test_api_projects.py    # 项目 CRUD 与任务台状态桥接
+│   ├── test_api_tasks.py       # 任务、子任务、标签、任务↔图纸关联
+│   ├── test_api_diagrams.py    # 画布保存、节点索引、节点跟进与关联
+│   ├── test_api_views.py       # 聚合视图、页面路由、静态资源、错误格式
+│   ├── test_services.py        # 服务层辅助函数与节点索引
+│   ├── test_tools.py           # 示例数据、历史 JSON 迁移、Flask CLI
+│   ├── test_ai.py              # AI 草稿/确认/配置/会话（假模型，不联网）
+│   └── test_ai_config.py       # AI 配置校验、工具循环、草稿生命周期
 ├── tools/
 │   ├── seed_demo.py            # 示例数据
 │   └── migrate_json.py         # 历史 JSON 数据导入
@@ -124,7 +170,7 @@ python tools/migrate_json.py --todo todos.json --db my.db \
   --project-name "XX 银行" --stage poc --visio-project "XX 银行"
 ```
 
-迁移脚本会保留任务 id、创建时间、子任务、标签、循环规则、AI 配置与对话记录；画布 JSON 会解析出节点索引，但不会自动建立节点-任务关联。
+迁移脚本会保留任务 id、创建时间、子任务、标签、循环规则、AI 配置与对话记录；画布 JSON 会解析出节点索引，但不会自动建立节点-任务关联。首次打开全局 AI 助手时，会把最近一份旧 `aiConfig` 自动迁移为全局配置。
 
 ## 主要接口
 
@@ -134,8 +180,8 @@ python tools/migrate_json.py --todo todos.json --db my.db \
 GET    /api/projects                         项目列表（含统计）
 POST   /api/projects                         新建项目
 GET    /api/projects/<id>                     项目详情（任务/拓扑/动态）
-GET    /api/projects/<id>/todo-state          任务台全量状态
-PUT    /api/projects/<id>/todo-state          任务台全量回写（桥接用）
+GET    /api/projects/<id>/todo-state          经典任务台兼容状态
+PUT    /api/projects/<id>/todo-state          经典任务台全量回写（桥接/迁移用）
 
 GET    /api/tasks?project_id=&stage=&status=  任务查询
 POST   /api/tasks                             新建任务
@@ -154,6 +200,17 @@ GET    /api/views/overview                    总览聚合
 GET    /api/views/stage-board                 阶段看板
 GET    /api/views/links                       任务↔图 / 节点↔任务
 GET    /api/views/search?q=                   全局搜索
+
+GET    /api/ai/config                         全局 AI 配置（Key 仅返回掩码）
+PUT    /api/ai/config                         保存全局 AI 配置
+POST   /api/ai/test                           测试模型连接
+GET    /api/ai/conversations                  对话列表
+POST   /api/ai/conversations                  新建对话
+GET    /api/ai/conversations/<id>             对话详情（消息 + 草稿）
+DELETE /api/ai/conversations/<id>             删除对话
+POST   /api/ai/chat                           发送消息（服务端代理模型 + 工具循环）
+POST   /api/ai/actions/<id>/confirm           确认执行草稿
+POST   /api/ai/actions/<id>/cancel            取消草稿
 ```
 
 ## 设计说明
@@ -162,14 +219,21 @@ GET    /api/views/search?q=                   全局搜索
 - 项目是唯一枢纽：任务与拓扑图都必须挂在项目下，跨项目查询由聚合接口完成。
 - 节点索引：`diagram_nodes` 不是画布副本，而是从 `content_json` 解析出的「可检索节点」，保存画布时增量 upsert、删除已不存在的节点。
 - 节点角标状态：`diagram_nodes.followup_status` 与主任务状态联动；任务完成时自动把角标改成「已完成」。
-- 自动保存：拓扑编辑器每次 `commit()` 后 900ms 防抖 PUT；任务台每次 `saveStore()` 后 650ms 全量 PUT。数据量是个人/小团队级别，全量同步比做增量 diff 更稳。
+- 自动保存：拓扑编辑器每次 `commit()` 后 900ms 防抖 PUT；原生任务台按操作立即 PATCH/POST，项目统计通过事件刷新。
+- 任务台不再嵌套 TodoFlow：列表按售前阶段分组，看板按状态分列，任务详情直接管理子任务、标签、关联图纸和拓扑节点。
+- 全局 AI 两阶段写入：读工具直接查询；`create/update/delete` 工具只生成 `ai_actions` 草稿，用户在抽屉里改字段并点确认后才调用 `services.py` 落库，失败不会留下半成品。
+- AI 配置只存一份：`app_settings.ai_config`，首次打开会自动迁移最近一个项目的旧 `aiConfig`；模型请求由 Flask 转发，Key 不回传浏览器。
+- AI 会话和草稿持久化在 `ai_conversations/ai_messages/ai_actions`，刷新页面或切换项目仍可继续。
 
 ## 已知限制
 
 - 单用户本地应用，没有认证 / 多租户 / 冲突合并；同一个项目不要同时在两个浏览器里编辑。
 - 拓扑图缩略图暂用占位图，未生成真实 PNG 预览。
-- 任务台的 AI 助手由浏览器直连 OpenAI 兼容服务，Key 存在项目 `todo_config` 中，不经过 Flask。
-- 删除项目会级联删除任务、拓扑图与关联，界面有二次确认。
+- AI 首版为非流式输出（等待完整回复）；拓扑图相关的 AI 操作为只读，任务与项目支持读写。
+- AI 模型需支持 OpenAI 兼容的 `tools` / function calling，否则无法生成项目/任务草稿。
+- API Key 以明文保存在本地 SQLite；本应用默认只监听 `127.0.0.1`，请勿直接暴露到公网。
+- 删除项目会级联删除任务、拓扑图与关联，界面有二次确认；AI 删除项目同样需要确认草稿。
+- `static/apps/tasks/` 旧版任务台不再有入口，仅保留用于回看历史数据；其 AI 面板已不再使用。
 
 ## 许可
 

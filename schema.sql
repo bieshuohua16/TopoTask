@@ -200,4 +200,59 @@ CREATE TABLE IF NOT EXISTS app_meta (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
-INSERT OR IGNORE INTO app_meta(key, value) VALUES ('schema_version', '1');
+
+-- ----------------------------------------------------------------------------
+-- 12. 全局设置（AI 配置等，与项目无关，一处配置全局可用）
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS app_settings (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL
+);
+
+-- ----------------------------------------------------------------------------
+-- 13. AI 会话（全局 AI 助手；project_id 仅表示会话创建时的上下文，可选）
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS ai_conversations (
+    id         TEXT PRIMARY KEY,
+    title      TEXT NOT NULL DEFAULT '新对话',
+    project_id TEXT REFERENCES projects(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ai_conv_updated ON ai_conversations(updated_at DESC);
+
+-- ----------------------------------------------------------------------------
+-- 14. AI 消息（user / assistant / tool，含 function calling 原始信息）
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS ai_messages (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    conversation_id TEXT NOT NULL REFERENCES ai_conversations(id) ON DELETE CASCADE,
+    role            TEXT NOT NULL,                -- system | user | assistant | tool
+    content         TEXT NOT NULL DEFAULT '',
+    tool_calls      TEXT NOT NULL DEFAULT '',     -- assistant 的 tool_calls JSON
+    tool_call_id    TEXT NOT NULL DEFAULT '',
+    name            TEXT NOT NULL DEFAULT '',     -- tool 名称
+    meta            TEXT NOT NULL DEFAULT '{}',   -- 展示用附加信息（错误标记等）
+    created_at      TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ai_msg_conv ON ai_messages(conversation_id, id);
+
+-- ----------------------------------------------------------------------------
+-- 15. AI 待确认动作（AI 只生成草稿，用户确认后才真正写库）
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS ai_actions (
+    id              TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL REFERENCES ai_conversations(id) ON DELETE CASCADE,
+    kind            TEXT NOT NULL,                -- create_project | update_project | delete_project
+                                                  -- create_task | update_task | delete_task
+    payload         TEXT NOT NULL DEFAULT '{}',   -- 可编辑字段 + 目标 id + 摘要
+    status          TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (status IN ('pending','applied','cancelled')),
+    result          TEXT NOT NULL DEFAULT '{}',   -- 执行结果（项目/任务 id、名称）
+    created_at      TEXT NOT NULL,
+    applied_at      TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_ai_actions_conv ON ai_actions(conversation_id, status);
+
+INSERT OR REPLACE INTO app_meta(key, value) VALUES ('schema_version', '2');

@@ -22,7 +22,6 @@ from services import (
     STATUS_LABELS,
     STATUSES,
     diagram_dict,
-    ensure_project,
     project_dict,
     project_stats,
 )
@@ -35,11 +34,11 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.config.from_mapping(
         SECRET_KEY=os.environ.get("TOPOTASH_SECRET", "topotash-local-dev"),
         DATABASE=os.environ.get("TOPOTASH_DB", str(BASE_DIR / "topotash.db")),
-        JSON_SORT_KEYS=False,
     )
     if test_config:
         app.config.update(test_config)
     app.json.ensure_ascii = False
+    app.json.sort_keys = False
     app.teardown_appcontext(close_db)
 
     # First run convenience: create the schema when the DB is absent/empty.

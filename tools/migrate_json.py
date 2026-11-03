@@ -94,6 +94,15 @@ def _insert_task(db, project_id, category_id, t, index, stage, tag_cache):
     due = t.get("dueDate") or t.get("due_date")
     created_at = t.get("createdAt") or utcnow()
     updated_at = t.get("updatedAt") or created_at
+    # ``0`` is a valid priority (P0) and a valid sort order, so it must not be
+    # swallowed by an ``or`` fallback.
+    raw_priority = t.get("priority")
+    try:
+        priority = 2 if raw_priority in (None, "") else max(0, min(3, int(raw_priority)))
+    except (TypeError, ValueError):
+        priority = 2
+    order = t.get("order")
+    order = index if order is None else order
     db.execute(
         """INSERT INTO tasks
            (id, project_id, category_id, title, description, priority, status, stage, due_date,
@@ -101,9 +110,9 @@ def _insert_task(db, project_id, category_id, t, index, stage, tag_cache):
            VALUES (?,?,?,?,?,?,?,?,?,?,?,?, 'import', ?, ?, ?)""",
         (
             task_id, project_id, category_id, str(t.get("title") or "未命名任务")[:500],
-            str(t.get("description") or ""), max(0, min(3, int(t.get("priority") or 2))),
+            str(t.get("description") or ""), priority,
             status, t.get("stage") if t.get("stage") in STAGES else stage, due,
-            t.get("recur"), t.get("recurDay"), t.get("order") or index,
+            t.get("recur"), t.get("recurDay"), order,
             utcnow() if status == "done" else None, created_at, updated_at,
         ),
     )

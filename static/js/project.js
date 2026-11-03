@@ -6,7 +6,6 @@
   const KINDS = { topology: '逻辑拓扑', architecture: '系统架构', deployment: '部署图', other: '其他' };
   let project = window.TT_PROJECT;
   let activeTab = TT.qs('tab') || 'overview';
-  let todoLoaded = false;
   let diagrams = [];
 
   function setHeader(p) {
@@ -185,31 +184,6 @@
     }
   }
 
-  function loadTodo(taskId) {
-    if (todoLoaded) {
-      if (taskId) focusTodoTask(taskId);
-      return;
-    }
-    const wrap = document.getElementById('todoWrap');
-    const params = new URLSearchParams({ project_id: PROJECT_ID, embed: '1' });
-    if (taskId) params.set('task', taskId);
-    const iframe = document.createElement('iframe');
-    iframe.id = 'todoFrame';
-    iframe.title = '任务台';
-    iframe.src = '/static/apps/tasks/index.html?' + params.toString();
-    iframe.onload = () => { const loading = wrap.querySelector('.iframe-loading'); if (loading) loading.remove(); };
-    wrap.appendChild(iframe);
-    todoLoaded = true;
-    window.TT_TODO_TASK = taskId || null;
-  }
-
-  function focusTodoTask(taskId) {
-    const iframe = document.getElementById('todoFrame');
-    if (iframe && iframe.contentWindow) {
-      iframe.contentWindow.postMessage({ type: 'topotash:focus-task', taskId }, '*');
-    }
-  }
-
   function switchTab(tab, extra) {
     activeTab = tab;
     document.querySelectorAll('#projectTabs .tab').forEach(a => a.classList.toggle('active', a.dataset.tab === tab));
@@ -221,7 +195,9 @@
     params.set('tab', tab);
     if (extra && extra.task) params.set('task', extra.task); else params.delete('task');
     history.replaceState(null, '', '?' + params.toString());
-    if (tab === 'tasks') loadTodo(extra && extra.task);
+    if (tab === 'tasks' && window.TTTasks) {
+      window.TTTasks.show(PROJECT_ID, extra && extra.task, project);
+    }
     if (tab === 'diagrams') {
       TT.api('/api/diagrams?project_id=' + encodeURIComponent(PROJECT_ID))
         .then(d => { diagrams = d.items; renderDiagrams(); })
@@ -266,10 +242,8 @@
 
   const newBtn = document.getElementById('btnNewDiagram');
   if (newBtn) newBtn.onclick = newDiagram;
-  const openTodo = document.getElementById('btnOpenTodo');
-  if (openTodo) openTodo.onclick = () => {
-    window.open(`/projects/${PROJECT_ID}?tab=tasks`, '_blank');
-  };
+
+  document.addEventListener('tt:tasks-changed', () => { loadProject(); });
 
   window.addEventListener('message', (ev) => {
     const msg = ev.data || {};

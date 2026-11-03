@@ -1,10 +1,9 @@
 """Domain helpers shared by the API blueprints."""
 from __future__ import annotations
 
-import json
 from typing import Iterable
 
-from db import dumps, get_db, load_json, new_id, rows_to_list, utcnow
+from db import ApiError, get_db, load_json, new_id, utcnow
 
 STAGES = ("research", "proposal", "poc", "bidding")
 STAGE_LABELS = {
@@ -59,8 +58,6 @@ def text(value, default="") -> str:
 def ensure_project(project_id: str) -> dict:
     row = get_db().execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
     if not row:
-        from db import ApiError
-
         raise ApiError(f"项目不存在：{project_id}", 404, "project_not_found")
     return dict(row)
 
@@ -78,8 +75,10 @@ def log_activity(project_id: str, entity_type: str, entity_id: str | None, actio
 # ---------------------------------------------------------------------------
 def project_dict(row, stats: dict | None = None) -> dict:
     data = dict(row)
+    # 旧任务台的 todo_config（含历史 AI Key）只保留在数据库和服务端 todo-state 接口，
+    # 不再随项目对象返回给页面 / 浏览器。
+    data.pop("todo_config", None)
     data["metadata"] = load_json(data.get("metadata"), {})
-    data["todo_config"] = load_json(data.get("todo_config"), {})
     data["stage_label"] = STAGE_LABELS.get(data["stage"], data["stage"])
     data["status_label"] = STATUS_LABELS.get(data["status"], data["status"])
     if stats is not None:
@@ -125,6 +124,91 @@ def project_stats(project_id: str) -> dict:
         "followup_count": followup["n"] or 0,
         "next_due": next_due["due_date"] if next_due else None,
     }
+
+
+PROJECT_FIELDS = (
+    "name", "code", "customer", "industry", "owner", "stage", "status",
+    "description", "color", "start_date", "end_date",
+)
+
+
+def clean_project_payload(data: dict, partial: bool = False) -> dict:
+    """Normalise project fields from a form or an AI draft."""
+    out = {}
+    for key in PROJECT_FIELDS:
+        if key in data:
+            out[key] = data[key]
+    if "name" in out:
+        out["name"] = text(out["name"])
+    for key in ("code", "customer", "industry", "owner", "description"):
+        if key in out:
+            out[key] = text(out[key])
+    if "stage" in out:
+        out["stage"] = clean_stage(out["stage"])
+    if "status" in out:
+        out["status"] = clean_status(out["status"])
+    if not partial and not out.get("name"):
+        raise ApiError("项目名称不能为空", 400, "name_required")
+    return out
+
+
+def create_project_record(fields: dict) -> str:
+    """Insert a project plus its default task category. Caller commits."""
+    db = get_db()
+    pid = new_id("p_")
+    now = utcnow()
+    fields = dict(fields)
+    fields.setdefault("name", "")
+    fields["color"] = fields.get("color") or "#5b6cf0"
+    fields["stage"] = clean_stage(fields.get("stage"), "research")
+    fields["status"] = clean_status(fields.get("status"), "active")
+    fields["description"] = fields.get("description") or ""
+    db.execute(
+        """INSERT INTO projects
+           (id, name, code, customer, industry, owner, stage, status, description, color,
+            start_date, end_date, todo_config, metadata, created_at, updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?, '{}', '{}', ?, ?)""",
+        (
+            pid, fields["name"], fields.get("code"), fields.get("customer"),
+            fields.get("industry"), fields.get("owner"), fields["stage"], fields["status"],
+            fields["description"], fields["color"], fields.get("start_date"),
+            fields.get("end_date"), now, now,
+        ),
+    )
+    # 每个项目默认带一个任务分类，任务台的「项目」下拉才有可选项
+    db.execute(
+        "INSERT INTO task_categories(id, project_id, name, color, sort_order, created_at)"
+        " VALUES (?,?,?,?,?,?)",
+        (new_id("c_"), pid, "默认分类", "#6366f1", 0, now),
+    )
+    log_activity(pid, "project", pid, "create", fields["name"])
+    return pid
+
+
+def update_project_record(project_id: str, fields: dict) -> dict:
+    """Update project fields, log the change and return the fresh project dict. Caller commits."""
+    ensure_project(project_id)
+    fields = dict(fields)
+    fields.pop("id", None)
+    if not fields:
+        raise ApiError("没有要更新的字段", 400, "empty_patch")
+    db = get_db()
+    fields["updated_at"] = utcnow()
+    sets = ", ".join(f"{k}=?" for k in fields)
+    db.execute(f"UPDATE projects SET {sets} WHERE id=?", [*fields.values(), project_id])
+    log_activity(
+        project_id, "project", project_id, "update",
+        ", ".join(k for k in fields if k != "updated_at"),
+    )
+    row = db.execute("SELECT * FROM projects WHERE id=?", (project_id,)).fetchone()
+    return project_dict(row, project_stats(project_id))
+
+
+def delete_project_record(project_id: str) -> dict:
+    """Delete a project (tasks/diagrams cascade). Caller commits."""
+    project = ensure_project(project_id)
+    get_db().execute("DELETE FROM projects WHERE id=?", (project_id,))
+    return {"deleted": True, "id": project_id, "name": project["name"]}
 
 
 # ---------------------------------------------------------------------------
@@ -348,8 +432,6 @@ def update_task_record(task_id: str, payload: dict, log: bool = True) -> dict:
     db = get_db()
     row = db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
     if not row:
-        from db import ApiError
-
         raise ApiError(f"任务不存在：{task_id}", 404, "task_not_found")
     task = dict(row)
     project = ensure_project(task["project_id"])
@@ -401,6 +483,30 @@ def update_task_record(task_id: str, payload: dict, log: bool = True) -> dict:
     if log:
         log_activity(task["project_id"], "task", task_id, "update", fields["title"])
     return task_dict(task_id)
+
+
+def delete_task_record(task_id: str) -> dict:
+    """Delete a task and clear the follow-up badge of nodes left without tasks. Caller commits."""
+    db = get_db()
+    row = db.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
+    if not row:
+        raise ApiError(f"任务不存在：{task_id}", 404, "task_not_found")
+    diagrams = db.execute(
+        "SELECT DISTINCT diagram_id, node_key FROM node_task_links WHERE task_id=?", (task_id,)
+    ).fetchall()
+    db.execute("DELETE FROM tasks WHERE id=?", (task_id,))
+    for link in diagrams:
+        remaining = db.execute(
+            "SELECT 1 FROM node_task_links WHERE diagram_id=? AND node_key=? LIMIT 1",
+            (link["diagram_id"], link["node_key"]),
+        ).fetchone()
+        if not remaining:
+            db.execute(
+                "UPDATE diagram_nodes SET followup_status='none' WHERE diagram_id=? AND node_key=?",
+                (link["diagram_id"], link["node_key"]),
+            )
+    log_activity(row["project_id"], "task", task_id, "delete", row["title"])
+    return {"deleted": True, "id": task_id, "title": row["title"], "project_id": row["project_id"]}
 
 
 def sync_node_status_for_task(task_id: str) -> None:

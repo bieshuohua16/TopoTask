@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import json
-import os
 import sqlite3
 import uuid
 from datetime import datetime, timezone
@@ -11,7 +10,6 @@ from pathlib import Path
 from flask import current_app, g
 
 BASE_DIR = Path(__file__).resolve().parent
-DEFAULT_DB_PATH = BASE_DIR / "topotash.db"
 
 
 def utcnow() -> str:
@@ -55,49 +53,12 @@ def init_db(app) -> None:
 
 
 def ensure_schema(app) -> None:
-    """Create the schema when the DB file is missing, empty, or has no projects table."""
-    db_path = Path(app.config["DATABASE"])
-    needs_init = not db_path.exists() or db_path.stat().st_size == 0
-    if not needs_init:
-        try:
-            conn = sqlite3.connect(db_path)
-            try:
-                row = conn.execute(
-                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='projects'"
-                ).fetchone()
-            finally:
-                conn.close()
-            needs_init = row is None
-        except sqlite3.DatabaseError:
-            needs_init = True
-    if needs_init:
-        init_db(app)
+    """Create or upgrade the schema. The script is idempotent, so run it on every start.
 
-
-def db_session():
-    """Small context manager that commits/rolls back the request connection."""
-    db = get_db()
-
-    class _Session:
-        def __enter__(self):
-            return db
-
-        def __exit__(self, exc_type, exc, tb):
-            if exc_type is None:
-                db.commit()
-            else:
-                db.rollback()
-            return False
-
-    return _Session()
-
-
-def row_to_dict(row: sqlite3.Row | None) -> dict | None:
-    return dict(row) if row is not None else None
-
-
-def rows_to_list(rows) -> list[dict]:
-    return [dict(r) for r in rows]
+    Older builds only initialised a missing database; running ``CREATE TABLE IF NOT
+    EXISTS`` each boot keeps existing databases in step when new tables are added.
+    """
+    init_db(app)
 
 
 def load_json(raw, default):
@@ -111,11 +72,6 @@ def load_json(raw, default):
 
 def dumps(value) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-
-
-def database_path() -> str:
-    """Resolve DB path from env or default, without needing an app context."""
-    return os.environ.get("TOPOTASH_DB", str(DEFAULT_DB_PATH))
 
 
 class ApiError(Exception):
