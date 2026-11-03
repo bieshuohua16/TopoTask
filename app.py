@@ -91,6 +91,24 @@ def create_app(test_config: dict | None = None) -> Flask:
         diagram = diagram_dict(diagram_row)
         return render_template("editor.html", project=project, diagram=diagram)
 
+    @app.get("/diagrams/<diagram_id>")
+    def diagram_editor_library(diagram_id):
+        """Editor for diagrams that live in the library without a project."""
+        diagram_row = get_db().execute(
+            "SELECT * FROM diagrams WHERE id=?", (diagram_id,)
+        ).fetchone()
+        if not diagram_row:
+            return redirect(url_for("diagrams_library"))
+        if diagram_row["project_id"]:
+            return redirect(
+                url_for(
+                    "diagram_editor",
+                    project_id=diagram_row["project_id"],
+                    diagram_id=diagram_id,
+                )
+            )
+        return render_template("editor.html", project=None, diagram=diagram_dict(diagram_row))
+
     @app.get("/healthz")
     def healthz():
         try:

@@ -4,7 +4,7 @@
 
 TopoTash 是一个自带后端的完整 Web 应用。每个项目下有多个任务和多张拓扑图；任务可以关联图纸，拓扑图节点可以标记「待跟进」并直接创建或跳转到任务；所有视图都可以按售前阶段聚合。
 
-- 项目总览、阶段看板、拓扑图库、项目工作台
+- 项目总览、阶段看板、拓扑图库（新建 / 导入 / 复制 / 绑定项目；支持暂不绑定项目的库内图纸）、项目工作台
 - 原生任务台：按售前阶段分组的列表、状态看板、优先级、子任务、标签、搜索、任务↔图纸↔节点关联
 - 全局 AI 助手：一处配置 OpenAI 兼容 API，向导式新建项目、管理任务；所有写入先生成草稿，确认后执行
 - 拓扑编辑器：系统架构图、逻辑拓扑、POC 部署图，节点级任务联动；只保留 PNG / SVG / reveal.js 片段三种导出，画布自动保存到 TopoTash
@@ -34,6 +34,38 @@ TopoTash 是一个自带后端的完整 Web 应用。每个项目下有多个任
 
 环境：Python 3.10+（开发时使用 3.15），浏览器用 Chrome / Edge。
 
+### Windows 一键首次启动
+
+双击项目目录里的 **`首次启动.bat`**，向导会依次完成：
+
+1. 检查 Python 版本（≥ 3.10）与依赖；缺少 Flask 时自动执行 `pip install -r requirements.txt`
+2. 初始化 `topotash.db`（幂等，已有数据库不会被清空）
+3. 数据库为空时写入 4 个示例项目 / 23 个任务 / 5 张拓扑图；已有项目则跳过
+4. 在桌面创建「TopoTash 拓事」快捷方式，图标使用 `static/topotash.ico`
+
+之后双击桌面上的「TopoTash 拓事」即可启动：控制台会拉起本地服务并自动打开浏览器。重复双击只会重新打开页面，不会启动第二个实例；在服务窗口按 `Ctrl+C` 或关闭窗口即可停止。
+
+向导也可以手动运行，便于指定数据库或跳过某些步骤：
+
+```bash
+python setup_first_run.py                      # 等同双击首次启动.bat
+python setup_first_run.py --db D:\data\tt.db   # 换数据库位置
+python setup_first_run.py --no-shortcut        # 只初始化，不建快捷方式
+python setup_first_run.py --help               # 全部参数
+```
+
+启动器本身也可以直接使用：
+
+```bash
+python start_topotash.py                # 启动并打开浏览器（127.0.0.1:5000）
+python start_topotash.py --port 5050    # 换端口
+python start_topotash.py --debug        # Flask 调试模式
+```
+
+> 快捷方式记录的是当前 Python 解释器路径和项目绝对路径。更换 Python、移动项目目录后，重新双击 `首次启动.bat` 即可更新。
+
+### 手动启动
+
 ```bash
 # 1. 安装依赖（只有一个 Flask）
 python -m pip install flask
@@ -41,7 +73,7 @@ python -m pip install flask
 # 2. 初始化数据库（生成 topotash.db；首次启动也会自动创建）
 python app.py init-db
 
-# 3. 可选：写入 4 个示例项目 / 23 个任务 / 4 张拓扑图
+# 3. 可选：写入 4 个示例项目 / 23 个任务 / 5 张拓扑图
 python app.py seed-demo
 
 # 4. 启动（debug，127.0.0.1:5000）
@@ -101,6 +133,9 @@ TopoTash 由一个 Flask 应用统一托管：
 ```
 TopoTash/
 ├── app.py                      # Flask 入口、页面路由、CLI（init-db / seed-demo）
+├── start_topotash.py           # 桌面快捷方式调用的启动器（自动开浏览器、防重复启动）
+├── setup_first_run.py          # 首次启动向导：环境检查 / 建库 / 示例数据 / 快捷方式
+├── 首次启动.bat                # Windows 双击入口（找到 Python 后运行上面的向导）
 ├── db.py                       # SQLite 连接、事务、通用工具
 ├── schema.sql                  # 全部建表语句（含索引、外键、CHECK）
 ├── services.py                 # 领域服务：项目/任务/节点同步、经典任务台状态
@@ -121,6 +156,8 @@ TopoTash/
 │   ├── project.html
 │   └── editor.html
 ├── static/
+│   ├── favicon.svg
+│   ├── topotash.ico            # 快捷方式图标（首次启动向导生成）
 │   ├── css/topotash.css
 │   ├── css/ai.css              # 全局 AI 抽屉与草稿卡片
 │   ├── js/                     # shell / dashboard / board / project / tasks / editor / ai
@@ -135,11 +172,14 @@ TopoTash/
 │   ├── test_api_views.py       # 聚合视图、页面路由、静态资源、错误格式
 │   ├── test_services.py        # 服务层辅助函数与节点索引
 │   ├── test_tools.py           # 示例数据、历史 JSON 迁移、Flask CLI
+│   ├── test_setup_scripts.py   # 首次启动向导辅助函数与图标生成
 │   ├── test_ai.py              # AI 草稿/确认/配置/会话（假模型，不联网）
 │   └── test_ai_config.py       # AI 配置校验、工具循环、草稿生命周期
 ├── tools/
 │   ├── seed_demo.py            # 示例数据
-│   └── migrate_json.py         # 历史 JSON 数据导入
+│   ├── data/gpu_cluster_topology.vweb.json  # 真实画布存档（示例数据里的 GPU 集群拓扑）
+│   ├── migrate_json.py         # 历史 JSON 数据导入
+│   └── make_icon.py            # 生成 static/topotash.ico（纯标准库，无需 Pillow）
 ├── docs/
 │   ├── DESIGN.md               # 数据模型、Schema、API、前端架构
 │   ├── API.md                  # REST API 明细
@@ -189,8 +229,11 @@ PATCH  /api/tasks/<id>                        更新任务
 POST   /api/tasks/<id>/diagrams               任务关联拓扑图
 DELETE /api/tasks/<id>/diagrams/<did>         取消关联
 
-GET    /api/diagrams?project_id=              拓扑图列表
-POST   /api/diagrams                          新建拓扑图
+GET    /api/diagrams?project_id=              拓扑图列表（unbound=1 查未绑定图纸）
+POST   /api/diagrams                          新建拓扑图（project_id 可省略）
+POST   /api/diagrams/import                   导入画布 JSON（project_id 可省略）
+POST   /api/diagrams/<id>/duplicate           复制拓扑图
+PATCH  /api/diagrams/<id>                     重命名 / 修改类型 / 绑定项目
 GET    /api/diagrams/<id>/content             画布 JSON（含节点跟进信息）
 PUT    /api/diagrams/<id>/content             保存画布 JSON（同步节点索引）
 POST   /api/diagrams/<id>/nodes/<key>/followup 标记节点 / 创建或关联任务

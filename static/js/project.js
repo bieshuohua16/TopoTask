@@ -109,10 +109,15 @@
     if (!diagrams.length) {
       grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
         <div class="empty-icon">${TT.icon.diagram}</div>
-        <h3>还没有拓扑图</h3><p>新建一张，把系统架构或 POC 部署关系画出来。</p>
-        <button class="btn btn-primary" id="btnEmptyNewDiagram">新建拓扑图</button></div>`;
+        <h3>还没有拓扑图</h3><p>新建一张，把系统架构或 POC 部署关系画出来；也可以导入已有画布 JSON。</p>
+        <div class="empty-actions">
+          <button class="btn btn-ghost" id="btnEmptyImportDiagram">导入拓扑图</button>
+          <button class="btn btn-primary" id="btnEmptyNewDiagram">新建拓扑图</button>
+        </div></div>`;
       const b = document.getElementById('btnEmptyNewDiagram');
       if (b) b.onclick = newDiagram;
+      const ib = document.getElementById('btnEmptyImportDiagram');
+      if (ib) ib.onclick = importDiagram;
       return;
     }
     grid.innerHTML = diagrams.map(d => `
@@ -151,6 +156,14 @@
         const created = await TT.api('/api/diagrams', { method: 'POST', body: payload });
         location.href = `/projects/${PROJECT_ID}/diagrams/${created.id}`;
       }
+    });
+  }
+
+  function importDiagram() {
+    if (!window.TTDiagrams) return;
+    window.TTDiagrams.importDiagram({
+      projectId: PROJECT_ID,
+      onDone: () => { loadProject(); }
     });
   }
 
@@ -242,6 +255,8 @@
 
   const newBtn = document.getElementById('btnNewDiagram');
   if (newBtn) newBtn.onclick = newDiagram;
+  const importBtn = document.getElementById('btnImportDiagram');
+  if (importBtn) importBtn.onclick = importDiagram;
 
   document.addEventListener('tt:tasks-changed', () => { loadProject(); });
 

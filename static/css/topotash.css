@@ -162,7 +162,7 @@ svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 1.7; stroke
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 22px; }
 .page-head h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -.02em; font-weight: 700; }
 .page-head p { margin: 0; color: var(--muted); font-size: 13px; }
-.head-actions { display: flex; align-items: center; gap: 10px; }
+.head-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: 7px;
@@ -234,6 +234,7 @@ svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 1.7; stroke
 .panel-head.standalone { background: transparent; border: 0; padding: 0 0 4px; box-shadow: none; margin-bottom: 14px; }
 .panel-head h2 { font-size: 15px; margin: 0 0 2px; letter-spacing: -.01em; }
 .panel-head p { margin: 0; color: var(--muted); font-size: 12px; }
+.panel-actions { display: flex; align-items: center; gap: 8px; flex: none; flex-wrap: wrap; justify-content: flex-end; }
 .panel-badge { background: var(--surface-3); color: var(--ink-2); border-radius: 99px; font-size: 11px; font-weight: 700; padding: 2px 9px; }
 .link-more { color: var(--primary); font-size: 12.5px; font-weight: 600; white-space: nowrap; }
 .link-more:hover { text-decoration: underline; }
@@ -307,9 +308,18 @@ svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 1.7; stroke
 .task-row .tr-sub .proj { color: var(--primary); }
 .task-row .tr-due { font-size: 11px; color: var(--muted); white-space: nowrap; }
 .task-row .tr-due.overdue { color: var(--red); }
-.task-row .tr-status { font-size: 10px; padding: 1px 7px; border-radius: 99px; background: var(--surface-3); color: var(--ink-2); white-space: nowrap; }
-.task-row .tr-status.doing { background: var(--amber-soft); color: var(--amber); }
-.task-row .tr-status.done { background: var(--teal-soft); color: var(--teal); }
+.task-row .tr-status,
+.followup-row .tr-status {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 18px; padding: 0 7px; box-sizing: border-box; flex: none;
+  font-size: 10px; line-height: 1; border-radius: 99px;
+  background: var(--surface-3); color: var(--ink-2); white-space: nowrap;
+}
+.task-row .tr-status.doing,
+.followup-row .tr-status.doing { background: var(--amber-soft); color: var(--amber); }
+.task-row .tr-status.done,
+.followup-row .tr-status.done { background: var(--teal-soft); color: var(--teal); }
+.followup-row .tr-status { align-self: center; }
 .followup-row { display: flex; gap: 10px; padding: 9px 8px; border-bottom: 1px solid var(--line); cursor: pointer; }
 .followup-row:last-child { border-bottom: 0; }
 .followup-row:hover { background: var(--surface-2); }
@@ -326,6 +336,7 @@ svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 1.7; stroke
 .empty-icon svg { width: 34px; height: 34px; }
 .empty-state h3 { margin: 0 0 4px; font-size: 16px; }
 .empty-state p { margin: 0 0 16px; color: var(--muted); font-size: 13px; }
+.empty-actions { display: flex; align-items: center; justify-content: center; gap: 8px; }
 
 /* ---------- board ---------- */
 .board { display: grid; grid-template-columns: repeat(4, minmax(240px, 1fr)); gap: 14px; align-items: start; }
@@ -445,6 +456,13 @@ svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 1.7; stroke
 .diagram-info b { display: block; font-size: 13.5px; margin-bottom: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .diagram-info span { font-size: 11px; color: var(--muted); }
 .diagram-info .di-meta { display: flex; gap: 10px; margin-top: 7px; font-size: 10.5px; color: var(--muted); }
+.diagram-info .di-project { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.di-card-actions { display: flex; gap: 6px; margin-top: 10px; padding-top: 9px; border-top: 1px dashed var(--line); }
+.di-card-actions button {
+  flex: 1; height: 26px; border: 1px solid var(--line); border-radius: 6px;
+  background: #fff; color: var(--ink-2); font-size: 11.5px; font-weight: 600;
+}
+.di-card-actions button:hover { border-color: #b9c0f2; color: var(--primary); background: var(--primary-soft); }
 
 .links-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-items: start; }
 .table-wrap { overflow-x: auto; }
@@ -489,8 +507,14 @@ svg { width: 18px; height: 18px; stroke: currentColor; stroke-width: 1.7; stroke
 .field input, .field select, .field textarea {
   height: 36px; border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; outline: none; background: #fff;
 }
+.field input[type="file"] { height: auto; padding: 7px 8px; font-size: 12px; background: var(--surface-2); }
+.field-hint { color: var(--muted); font-size: 11px; line-height: 1.45; }
 .field textarea { height: 76px; padding: 8px 10px; resize: vertical; }
 .field input:focus, .field select:focus, .field textarea:focus { border-color: #b9c0f2; box-shadow: 0 0 0 3px rgba(79,91,213,.1); }
+.bind-warning {
+  margin-top: 12px; padding: 9px 11px; border-radius: 8px; font-size: 11.5px;
+  color: var(--amber); background: var(--amber-soft); border: 1px solid #f6dfbf;
+}
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 .form-error { color: var(--red); font-size: 11.5px; margin-top: 8px; display: none; }
 .form-error.show { display: block; }

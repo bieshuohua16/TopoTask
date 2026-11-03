@@ -146,9 +146,14 @@
 <section class="tab-panel hidden" id="panel-diagrams">
   <div class="panel-head standalone">
     <div><h2>拓扑图</h2><p>架构图、逻辑拓扑、POC 部署图，均可绑定到任务</p></div>
-    <button class="btn btn-primary" id="btnNewDiagram">
-      <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14"/></svg>新建拓扑图
-    </button>
+    <div class="panel-actions">
+      <button class="btn btn-ghost" id="btnImportDiagram">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>导入拓扑图
+      </button>
+      <button class="btn btn-primary" id="btnNewDiagram">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14"/></svg>新建拓扑图
+      </button>
+    </div>
   </div>
   <div class="diagram-grid" id="projectDiagramGrid"></div>
 </section>
@@ -172,5 +177,6 @@
 window.TT_PROJECT = {{ project|tojson }};
 </script>
 <script src="{{ url_for('static', filename='js/tasks.js') }}"></script>
+<script src="{{ url_for('static', filename='js/diagram-actions.js') }}"></script>
 <script src="{{ url_for('static', filename='js/project.js') }}"></script>
 {% endblock %}

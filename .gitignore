@@ -13,3 +13,4 @@ tmp_*.db
 # local tooling
 .pytest_cache/
 node_modules/
+.tmp/

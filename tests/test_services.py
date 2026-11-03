@@ -2,8 +2,12 @@
 from __future__ import annotations
 
 import re
+import sqlite3
+import tempfile
+import unittest
+from pathlib import Path
 
-from db import dumps, get_db, load_json, new_id, utcnow
+from db import dumps, get_db, load_json, migrate_schema, new_id, utcnow
 from services import (
     clean_int,
     clean_project_payload,
@@ -67,6 +71,104 @@ class PureHelperTest(ApiTestCase):
 
         self.assertTrue(re.match(r"^t_[0-9a-f]{12}$", new_id("t_")))
         self.assertTrue(re.match(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$", utcnow()))
+
+
+class SchemaMigrationTest(unittest.TestCase):
+    def test_diagrams_project_id_becomes_nullable(self):
+        path = Path(tempfile.gettempdir()) / f"tt_migrate_{new_id()}.db"
+        conn = sqlite3.connect(path)
+        conn.executescript(
+            """
+            CREATE TABLE projects (id TEXT PRIMARY KEY, name TEXT NOT NULL);
+            CREATE TABLE diagrams (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                name TEXT NOT NULL,
+                kind TEXT NOT NULL DEFAULT 'topology',
+                description TEXT NOT NULL DEFAULT '',
+                content_json TEXT NOT NULL DEFAULT '{}',
+                version INTEGER NOT NULL DEFAULT 0,
+                node_count INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX idx_diagrams_project ON diagrams(project_id, updated_at DESC);
+            CREATE TABLE diagram_nodes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                diagram_id TEXT NOT NULL REFERENCES diagrams(id) ON DELETE CASCADE,
+                node_key TEXT NOT NULL,
+                UNIQUE (diagram_id, node_key)
+            );
+            INSERT INTO projects(id, name) VALUES ('p1', '项目一');
+            INSERT INTO diagrams
+                (id, project_id, name, kind, description, content_json, version, node_count,
+                 created_at, updated_at)
+            VALUES ('d1', 'p1', '旧图', 'topology', '', '{"shapes":{}}', 1, 0,
+                    '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z');
+            INSERT INTO diagram_nodes(diagram_id, node_key) VALUES ('d1', 'n1');
+            """
+        )
+        try:
+            self.assertTrue(
+                {r[1]: r for r in conn.execute("PRAGMA table_info(diagrams)")}["project_id"][3]
+            )
+            migrate_schema(conn)
+            columns = {r[1]: r for r in conn.execute("PRAGMA table_info(diagrams)")}
+            self.assertFalse(columns["project_id"][3])
+            self.assertEqual(conn.execute("SELECT name FROM diagrams WHERE id='d1'").fetchone()[0], "旧图")
+            self.assertEqual(
+                conn.execute("SELECT COUNT(*) FROM diagram_nodes WHERE diagram_id='d1'").fetchone()[0],
+                1,
+            )
+            self.assertEqual(conn.execute("PRAGMA foreign_key_check").fetchall(), [])
+            self.assertEqual(conn.execute("PRAGMA foreign_keys").fetchone()[0], 1)
+            conn.execute(
+                "INSERT INTO diagrams(id, project_id, name, created_at, updated_at)"
+                " VALUES ('d2', NULL, '库图', '2026-01-01T00:00:00Z', '2026-01-01T00:00:00Z')"
+            )
+            self.assertIsNone(
+                conn.execute("SELECT project_id FROM diagrams WHERE id='d2'").fetchone()[0]
+            )
+            conn.commit()
+        finally:
+            conn.close()
+            for suffix in ("", "-wal", "-shm"):
+                try:
+                    Path(str(path) + suffix).unlink()
+                except FileNotFoundError:
+                    pass
+
+    def test_migration_is_idempotent(self):
+        path = Path(tempfile.gettempdir()) / f"tt_migrate_{new_id()}.db"
+        conn = sqlite3.connect(path)
+        conn.executescript(
+            """
+            CREATE TABLE diagrams (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL,
+                name TEXT NOT NULL,
+                kind TEXT NOT NULL DEFAULT 'topology',
+                description TEXT NOT NULL DEFAULT '',
+                content_json TEXT NOT NULL DEFAULT '{}',
+                version INTEGER NOT NULL DEFAULT 0,
+                node_count INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """
+        )
+        try:
+            migrate_schema(conn)
+            migrate_schema(conn)
+            columns = {r[1]: r for r in conn.execute("PRAGMA table_info(diagrams)")}
+            self.assertFalse(columns["project_id"][3])
+        finally:
+            conn.close()
+            for suffix in ("", "-wal", "-shm"):
+                try:
+                    Path(str(path) + suffix).unlink()
+                except FileNotFoundError:
+                    pass
 
 
 class NodeIndexTest(ApiTestCase):

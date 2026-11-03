@@ -104,8 +104,12 @@
           `<a class="search-item" href="/projects/${t.project_id}?tab=tasks&task=${encodeURIComponent(t.id)}"><span class="si-type">任务</span><span>${TT.esc(t.title)}</span><span style="margin-left:auto;color:#7c879a;font-size:11px">${TT.esc(t.project_name)}</span></a>`).join(''));
       }
       if (data.diagrams.length) {
-        sections.push('<div class="search-group-title">拓扑图</div>' + data.diagrams.map(d =>
-          `<a class="search-item" href="/projects/${d.project_id}/diagrams/${d.id}"><span class="si-type">拓扑</span><span>${TT.esc(d.name)}</span></a>`).join(''));
+        sections.push('<div class="search-group-title">拓扑图</div>' + data.diagrams.map(d => {
+          const href = d.project_id
+            ? `/projects/${d.project_id}/diagrams/${d.id}`
+            : `/diagrams/${d.id}`;
+          return `<a class="search-item" href="${href}"><span class="si-type">拓扑</span><span>${TT.esc(d.name)}</span>${d.project_id ? '' : '<span style="margin-left:auto;color:#7c879a;font-size:11px">未绑定项目</span>'}</a>`;
+        }).join(''));
       }
       lastItems = sections;
       pop.innerHTML = sections.length ? sections.join('') : `<div class="search-empty">没有找到「${TT.esc(q)}」相关内容</div>`;

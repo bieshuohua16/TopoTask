@@ -88,7 +88,7 @@
             <div class="fu-title">${TT.esc(n.label)}</div>
             <div class="fu-sub">${TT.esc(n.diagram_name)} · ${TT.esc(n.project_name)}${task ? ' · ' + TT.esc(task.title) : ''}</div>
           </div>
-          <span class="badge ${n.followup_status === 'done' ? 'teal' : n.followup_status === 'doing' ? 'blue' : 'amber'}">${n.followup_status === 'done' ? '已完成' : n.followup_status === 'doing' ? '进行中' : '待跟进'}</span>
+          <span class="tr-status ${n.followup_status === 'done' ? 'done' : n.followup_status === 'doing' ? 'doing' : ''}">${n.followup_status === 'done' ? '已完成' : n.followup_status === 'doing' ? '进行中' : '待跟进'}</span>
         </div>`;
     }).join('');
     box.querySelectorAll('.followup-row').forEach(row => {

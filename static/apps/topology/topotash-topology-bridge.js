@@ -6,7 +6,7 @@
   const ctx = window.TOPOTASH_CTX;
   if (!ctx) return;
 
-  const PID = ctx.projectId;
+  const PID = ctx.projectId || null;
   const DID = ctx.diagramId;
   const BASE = `/api/diagrams/${encodeURIComponent(DID)}`;
   const STATUS_COLOR = { todo: '#d97706', doing: '#2563eb', done: '#0d9488', none: '#94a3b8' };
@@ -51,11 +51,41 @@
   }
 
   // ------------------------------------------------------------ load / save
+  function ensureShapeDefaults() {
+    for (const id of Object.keys(model.shapes || {})) {
+      const s = model.shapes[id];
+      if (!s || typeof s !== 'object') continue;
+      if (typeof s.kind !== 'string') s.kind = 'rect';
+      if (typeof s.text !== 'string') s.text = '';
+      if (typeof s.fill !== 'string') s.fill = '#5b6cf0';
+      if (typeof s.stroke !== 'string') s.stroke = '#000000';
+      if (typeof s.textColor !== 'string') s.textColor = '#1f2329';
+      if (typeof s.fontSize !== 'number') s.fontSize = 12.5;
+      if (typeof s.fontFamily !== 'string') s.fontFamily = 'Microsoft YaHei';
+      if (typeof s.textAlign !== 'string') s.textAlign = 'center';
+      if (typeof s.textVAlign !== 'string') s.textVAlign = 'middle';
+      if (typeof s.opacity !== 'number') s.opacity = 1;
+      if (typeof s.fillOpacity !== 'number') s.fillOpacity = 1;
+      if (typeof s.strokeWidth !== 'number') s.strokeWidth = 1.6;
+      if (typeof s.radius !== 'number') s.radius = 10;
+      if (typeof s.x !== 'number') s.x = 0;
+      if (typeof s.y !== 'number') s.y = 0;
+      if (typeof s.w !== 'number') s.w = 120;
+      if (typeof s.h !== 'number') s.h = 120;
+      if (!Array.isArray(s.fields)) s.fields = [];
+      if (s.type === 'shape') {
+        if (typeof s.bold !== 'boolean') s.bold = false;
+        if (typeof s.italic !== 'boolean') s.italic = false;
+      }
+    }
+  }
+
   function applyDocument(data) {
     model.shapes = data.shapes || {};
     model.order = data.order || Object.keys(model.shapes);
     model.groups = data.groups || {};
     model.imagePool = data.imagePool || {};
+    ensureShapeDefaults();
     if (typeof imagePoolMigrate === 'function') imagePoolMigrate();
     if (typeof cleanupGroups === 'function') cleanupGroups();
     if (typeof normalizeShapes === 'function') normalizeShapes();
@@ -83,7 +113,7 @@
       state.docName = project.diagramName || '拓扑图';
       applyDocument(data);
       document.title = (project.diagramName || '拓扑图') + ' · TopoTash 拓事';
-      hint(`TopoTash · ${project.projectName || ''} · 画布自动保存`);
+      hint(`TopoTash · ${project.projectName || '未绑定项目'} · 画布自动保存`);
       booted = true;
       render();
       syncProps();
@@ -139,6 +169,74 @@
   window.saveDoc = function () { saveToServer(true); };
   // The local draft is per-browser; in TopoTash the server is the source of truth.
   window.scheduleAutosave = function () {};
+
+  // ------------------------------------------------------------ JSON export
+  // Export the live canvas in the same shape as the editor's .vweb.json so the
+  // 拓扑图库 / 项目「导入拓扑图」flow can import it again.
+  function exportJson() {
+    if (typeof model === 'undefined' || !model) {
+      if (typeof showToast === 'function') showToast('画布尚未就绪，无法导出', 'error');
+      return;
+    }
+    const shapes = {};
+    const order = [];
+    for (const id of (model.order || [])) {
+      if (model.shapes && model.shapes[id]) order.push(id);
+    }
+    for (const id of Object.keys(model.shapes || {})) {
+      if (order.indexOf(id) === -1) order.push(id);
+    }
+    for (const id of order) {
+      const shape = model.shapes[id];
+      if (!shape) continue;
+      const copy = JSON.parse(JSON.stringify(shape));
+      delete copy.tt;
+      shapes[id] = copy;
+    }
+    const data = {
+      app: 'topotash',
+      version: 3,
+      saved: new Date().toISOString(),
+      shapes,
+      order,
+      groups: model.groups || {},
+      imagePool: model.imagePool || {}
+    };
+    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    const rawName = String((project && project.diagramName) || state.docName || '拓扑图');
+    const base = rawName.replace(/[\\/:*?"<>|]+/g, '_').replace(/\.vweb\.json$/i, '').trim() || '拓扑图';
+    a.download = base + '.vweb.json';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+    post('topotash:exported', { filename: a.download });
+    if (window.parent === window && typeof showToast === 'function') {
+      showToast('已导出 JSON：' + a.download, 'success');
+    }
+  }
+  window.exportTopotashJson = exportJson;
+  window.addEventListener('message', (ev) => {
+    const msg = ev.data || {};
+    if (msg.type === 'topotash:export-json') exportJson();
+  });
+
+  // Add a JSON item to the editor's built-in 导出 menu.
+  function installExportMenuItem() {
+    const pop = document.querySelector('#fileMenu .menu-pop');
+    if (!pop || pop.querySelector('[data-act="exportJson"]')) return;
+    const item = document.createElement('div');
+    item.className = 'mi';
+    item.dataset.act = 'exportJson';
+    item.textContent = '导出 JSON（可再次导入）';
+    item.addEventListener('click', () => {
+      exportJson();
+      const menu = document.getElementById('fileMenu');
+      if (menu) menu.removeAttribute('open');
+    });
+    pop.appendChild(item);
+  }
+  installExportMenuItem();
 
   const origCommit = window.commit;
   window.commit = function () {
@@ -215,6 +313,10 @@
   }
 
   function openTask(taskId) {
+    if (!PID) {
+      if (typeof showToast === 'function') showToast('这张拓扑图尚未绑定项目', 'error');
+      return;
+    }
     post('topotash:open-task', { taskId });
     if (window.parent === window) {
       location.href = `/projects/${PID}?tab=tasks&task=${encodeURIComponent(taskId)}`;
@@ -223,6 +325,12 @@
 
   // ------------------------------------------------------------ task panel
   async function loadTasks() {
+    if (!PID) {
+      tasks = [];
+      tasksLoading = false;
+      decorateFollowupPanel();
+      return;
+    }
     if (tasksLoading) return;
     tasksLoading = true;
     try {
@@ -247,6 +355,10 @@
   }
 
   async function nodeAction(body) {
+    if (!PID) {
+      if (typeof showToast === 'function') showToast('请先把拓扑图绑定到项目', 'error');
+      return;
+    }
     const shape = selShapes()[0];
     if (!shape) return;
     try {
@@ -274,6 +386,16 @@
     if (!shape || shape.type !== 'shape') return;
     const stale = box.querySelector('.tt-followup-sec');
     if (stale) stale.remove();
+
+    if (!PID) {
+      const note = document.createElement('div');
+      note.className = 'prop-sec tt-followup-sec';
+      note.innerHTML = `
+        <h4>TopoTash 跟进 <span class="tt-sec-state none">未绑定项目</span></h4>
+        <div class="tt-note">这张拓扑图还没有绑定项目。回到拓扑图库把它绑定到项目后，就可以在节点上创建或关联任务。</div>`;
+      box.insertBefore(note, box.firstChild);
+      return;
+    }
 
     const tt = shapeTt(shape);
     const task = primaryTask(tt);

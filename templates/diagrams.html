@@ -11,7 +11,18 @@
     <p>系统架构、逻辑拓扑与 POC 部署图；节点上的待跟进标记会同步到任务。</p>
   </div>
   <div class="head-actions">
-    <select class="select" id="libraryProject"><option value="">全部项目</option></select>
+    <select class="select" id="libraryProject">
+      <option value="">全部项目</option>
+      <option value="__unbound__">未绑定项目</option>
+    </select>
+    <button class="btn btn-ghost" id="btnImportDiagram">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
+      导入拓扑图
+    </button>
+    <button class="btn btn-primary" id="btnNewDiagram">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14"/></svg>
+      新建拓扑图
+    </button>
   </div>
 </section>
 
@@ -21,10 +32,15 @@
 <div class="empty-state hidden" id="diagramEmpty">
   <div class="empty-icon"><svg viewBox="0 0 48 48" fill="none"><circle cx="12" cy="12" r="5"/><circle cx="36" cy="14" r="5"/><circle cx="24" cy="36" r="5"/><path d="m17 13 14 1M15 16l7 15M33 18l-7 14"/></svg></div>
   <h3>还没有拓扑图</h3>
-  <p>进入任意项目，在「拓扑图」标签页新建一张。</p>
+  <p>新建一张空白拓扑图，或导入编辑器导出的画布 JSON。</p>
+  <div class="empty-actions">
+    <button class="btn btn-ghost" id="btnEmptyImport">导入拓扑图</button>
+    <button class="btn btn-primary" id="btnEmptyNew">新建拓扑图</button>
+  </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/diagram-actions.js') }}"></script>
 <script src="{{ url_for('static', filename='js/diagrams.js') }}"></script>
 {% endblock %}

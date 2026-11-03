@@ -1,6 +1,8 @@
 """Diagram + node endpoints."""
 from __future__ import annotations
 
+import copy
+
 from flask import Blueprint, jsonify, request
 
 from db import ApiError, dumps, get_db, new_id, utcnow
@@ -27,12 +29,79 @@ EMPTY_CONTENT = {
     "imagePool": {},
 }
 
+KINDS = ("topology", "architecture", "deployment", "other")
+
 
 def _get_diagram(diagram_id: str):
     row = get_db().execute("SELECT * FROM diagrams WHERE id=?", (diagram_id,)).fetchone()
     if not row:
         raise ApiError(f"拓扑图不存在：{diagram_id}", 404, "diagram_not_found")
     return row
+
+
+def _clean_kind(value, fallback: str = "topology") -> str:
+    value = text(value)
+    return value if value in KINDS else fallback
+
+
+def _node_count(content: dict) -> int:
+    return len([s for s in (content.get("shapes") or {}).values()
+                if isinstance(s, dict) and s.get("type") == "shape"])
+
+
+def _normalise_content(content) -> dict:
+    """Validate a canvas document and strip runtime-only metadata."""
+    if not isinstance(content, dict) or not isinstance(content.get("shapes"), dict):
+        raise ApiError("内容格式错误：需要画布 JSON（含 shapes 对象）", 400, "invalid_content")
+    content = copy.deepcopy(content)
+    content.pop("_topotash", None)
+    for shape in content["shapes"].values():
+        if isinstance(shape, dict):
+            shape.pop("tt", None)
+    content["app"] = text(content.get("app")) or "topotash"
+    content["version"] = content.get("version") or 2
+    if not isinstance(content.get("order"), list):
+        content["order"] = list(content["shapes"].keys())
+    if not isinstance(content.get("groups"), dict):
+        content["groups"] = {}
+    if not isinstance(content.get("imagePool"), dict):
+        content["imagePool"] = {}
+    return content
+
+
+def _unique_diagram_name(project_id: str | None, base: str, suffix: str = "") -> str:
+    db = get_db()
+    base = (text(base) or "未命名拓扑图")[:200]
+    candidate = f"{base}{suffix}"
+    n = 2
+    while db.execute(
+        "SELECT 1 FROM diagrams WHERE project_id IS ? AND name=?", (project_id, candidate)
+    ).fetchone():
+        candidate = f"{base}{suffix} ({n})"
+        n += 1
+    return candidate[:200]
+
+
+def _create_diagram_record(
+    project_id: str | None, name: str, kind: str, description: str, content: dict
+) -> str:
+    """Insert a diagram + node index. Caller commits."""
+    db = get_db()
+    did = new_id("d_")
+    now = utcnow()
+    db.execute(
+        """INSERT INTO diagrams
+           (id, project_id, name, kind, description, content_json, version, node_count, created_at, updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        (
+            did, project_id, name, _clean_kind(kind), text(description), dumps(content), 1,
+            _node_count(content), now, now,
+        ),
+    )
+    sync_diagram_nodes(did, content)
+    if project_id:
+        log_activity(project_id, "diagram", did, "create", name)
+    return did
 
 
 def _diagram_with_counts(row) -> dict:
@@ -57,7 +126,10 @@ def list_diagrams():
     clauses = []
     args = []
     project_id = request.args.get("project_id")
-    if project_id:
+    unbound = request.args.get("unbound") in ("1", "true", "yes")
+    if unbound:
+        clauses.append("project_id IS NULL")
+    elif project_id:
         clauses.append("project_id=?")
         args.append(project_id)
     q = text(request.args.get("q"))
@@ -78,33 +150,72 @@ def list_diagrams():
 @bp.post("")
 def create_diagram():
     data = request.get_json(silent=True) or {}
-    project_id = text(data.get("project_id"))
-    if not project_id:
-        raise ApiError("缺少 project_id", 400, "project_required")
-    ensure_project(project_id)
+    project_id = text(data.get("project_id")) or None
+    if project_id:
+        ensure_project(project_id)
     name = text(data.get("name")) or "未命名拓扑图"
     content = data.get("content")
-    if not isinstance(content, dict) or "shapes" not in content:
-        content = dict(EMPTY_CONTENT)
-    did = new_id("d_")
-    now = utcnow()
-    db = get_db()
-    db.execute(
-        """INSERT INTO diagrams
-           (id, project_id, name, kind, description, content_json, version, node_count, created_at, updated_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?)""",
-        (
-            did, project_id, name, text(data.get("kind")) or "topology",
-            text(data.get("description")), dumps(content), 1,
-            len([s for s in (content.get("shapes") or {}).values()
-                 if isinstance(s, dict) and s.get("type") == "shape"]), now, now,
-        ),
+    if isinstance(content, dict) and isinstance(content.get("shapes"), dict):
+        content = _normalise_content(content)
+    else:
+        content = copy.deepcopy(EMPTY_CONTENT)
+    did = _create_diagram_record(
+        project_id, name, text(data.get("kind")), text(data.get("description")), content
     )
-    sync_diagram_nodes(did, content)
-    log_activity(project_id, "diagram", did, "create", name)
-    db.commit()
-    row = _get_diagram(did)
-    return jsonify(_diagram_with_counts(row)), 201
+    get_db().commit()
+    return jsonify(_diagram_with_counts(_get_diagram(did))), 201
+
+
+def _import_diagram_name(source_name: str) -> str:
+    name = text(source_name).replace("\\", "/").rsplit("/", 1)[-1]
+    for suffix in (".vweb.json", ".json"):
+        if name.lower().endswith(suffix):
+            name = name[: -len(suffix)]
+            break
+    return name.replace("_", " ").strip() or "导入的拓扑图"
+
+
+@bp.post("/import")
+def import_diagram():
+    """Import a canvas JSON file (e.g. an editor-exported ``.vweb.json``)."""
+    data = request.get_json(silent=True) or {}
+    project_id = text(data.get("project_id")) or None
+    if project_id:
+        ensure_project(project_id)
+    content = _normalise_content(data.get("content"))
+    source_name = text(data.get("source_name"))
+    name = _unique_diagram_name(
+        project_id, text(data.get("name")) or _import_diagram_name(source_name)
+    )
+    description = text(data.get("description"))
+    if not description and source_name:
+        description = f"从 {source_name} 导入"
+    did = _create_diagram_record(
+        project_id, name, text(data.get("kind")), description, content
+    )
+    get_db().commit()
+    return jsonify(_diagram_with_counts(_get_diagram(did))), 201
+
+
+@bp.post("/<diagram_id>/duplicate")
+def duplicate_diagram(diagram_id):
+    """Copy a diagram (canvas + node index); task links are not copied."""
+    row = _get_diagram(diagram_id)
+    data = request.get_json(silent=True) or {}
+    target_project = text(data.get("project_id")) or row["project_id"]
+    if target_project:
+        ensure_project(target_project)
+    raw_name = text(data.get("name"))
+    if raw_name:
+        name = _unique_diagram_name(target_project, raw_name)
+    else:
+        name = _unique_diagram_name(target_project, row["name"], " 副本")
+    content = _normalise_content(content_of(row))
+    did = _create_diagram_record(
+        target_project, name, row["kind"], row["description"], content
+    )
+    get_db().commit()
+    return jsonify(_diagram_with_counts(_get_diagram(did))), 201
 
 
 @bp.get("/<diagram_id>")
@@ -125,23 +236,89 @@ def get_diagram(diagram_id):
     return jsonify(data)
 
 
+def _drop_cross_project_links(diagram_id: str, project_id: str) -> None:
+    """Remove task links that no longer belong to the diagram's project."""
+    db = get_db()
+    affected = [
+        r["node_key"]
+        for r in db.execute(
+            """SELECT DISTINCT l.node_key FROM node_task_links l
+               JOIN tasks t ON t.id = l.task_id
+               WHERE l.diagram_id=? AND t.project_id!=?""",
+            (diagram_id, project_id),
+        ).fetchall()
+    ]
+    db.execute(
+        """DELETE FROM node_task_links WHERE diagram_id=?
+           AND task_id IN (SELECT id FROM tasks WHERE project_id!=?)""",
+        (diagram_id, project_id),
+    )
+    db.execute(
+        """DELETE FROM task_diagrams WHERE diagram_id=?
+           AND task_id IN (SELECT id FROM tasks WHERE project_id!=?)""",
+        (diagram_id, project_id),
+    )
+    for node_key in affected:
+        remaining = db.execute(
+            "SELECT 1 FROM node_task_links WHERE diagram_id=? AND node_key=? LIMIT 1",
+            (diagram_id, node_key),
+        ).fetchone()
+        if not remaining:
+            db.execute(
+                "UPDATE diagram_nodes SET followup_status='none' WHERE diagram_id=? AND node_key=?",
+                (diagram_id, node_key),
+            )
+
+
 @bp.patch("/<diagram_id>")
 def patch_diagram(diagram_id):
-    _get_diagram(diagram_id)
+    row = _get_diagram(diagram_id)
     data = request.get_json(silent=True) or {}
-    allowed = {"name", "kind", "description"}
-    fields = {k: data[k] for k in allowed if k in data}
+    fields = {}
+    for key in ("name", "description"):
+        if key in data:
+            fields[key] = text(data[key])
+    if "kind" in data:
+        fields["kind"] = _clean_kind(data["kind"], row["kind"])
+    project_changed = False
+    old_project_id = row["project_id"]
+    if "project_id" in data:
+        project_id = text(data["project_id"])
+        if not project_id:
+            raise ApiError("缺少 project_id", 400, "project_required")
+        ensure_project(project_id)
+        if project_id != old_project_id:
+            fields["project_id"] = project_id
+            project_changed = True
     if not fields:
         raise ApiError("没有要更新的字段", 400, "empty_patch")
-    fields = {k: text(v) for k, v in fields.items()}
     if "name" in fields and not fields["name"]:
         raise ApiError("拓扑图名称不能为空", 400, "name_required")
     fields["updated_at"] = utcnow()
-    sets = ", ".join(f"{k}=?" for k in fields)
     db = get_db()
+    sets = ", ".join(f"{k}=?" for k in fields)
     db.execute(f"UPDATE diagrams SET {sets} WHERE id=?", [*fields.values(), diagram_id])
+    if project_changed:
+        new_project_id = fields["project_id"]
+        _drop_cross_project_links(diagram_id, new_project_id)
+        old = db.execute("SELECT name FROM projects WHERE id=?", (old_project_id,)).fetchone() if old_project_id else None
+        new = db.execute("SELECT name FROM projects WHERE id=?", (new_project_id,)).fetchone()
+        if old_project_id:
+            log_activity(
+                old_project_id, "diagram", diagram_id, "update",
+                f"从项目「{old['name'] if old else old_project_id}」移出",
+            )
+        log_activity(
+            new_project_id, "diagram", diagram_id, "update",
+            f"绑定到项目「{new['name'] if new else new_project_id}」",
+        )
     db.commit()
-    return jsonify(_diagram_with_counts(_get_diagram(diagram_id)))
+    data = _diagram_with_counts(_get_diagram(diagram_id))
+    project = get_db().execute(
+        "SELECT name FROM projects WHERE id=?", (data["project_id"],)
+    ).fetchone()
+    data["project_name"] = project["name"] if project else ""
+    return jsonify(data)
 
 
 @bp.delete("/<diagram_id>")

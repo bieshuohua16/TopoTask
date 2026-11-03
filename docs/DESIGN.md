@@ -233,7 +233,7 @@ projects 1 ─── N task_categories
 | 字段 | 类型 | 说明 |
 |---|---|---|
 | `id` | TEXT PK | UUID |
-| `project_id` | TEXT FK | 所属项目，CASCADE |
+| `project_id` | TEXT FK | 所属项目，CASCADE；`NULL` 表示仅存放在拓扑图库、尚未绑定项目 |
 | `name` / `description` | TEXT | 图纸名称 / 说明 |
 | `kind` | TEXT | `topology/architecture/deployment/other` |
 | `content_json` | TEXT | 完整画布 JSON（shapes/order/groups/imagePool） |
@@ -322,6 +322,23 @@ POST /api/diagrams/<did>/nodes/<node_key>/followup
 5. 返回完整节点（含 `linked_tasks`），前端直接替换内存里的 `shape.tt` 并重绘角标。
 
 任务状态变化时，`services.sync_node_status_for_task()` 会把所有以该任务为 primary 的节点角标同步成新状态。
+
+### 4.3 拓扑图库操作
+
+拓扑图库页面（`/diagrams`）和项目「拓扑图」标签页共用 `static/js/diagram-actions.js`：
+
+```
+POST /api/diagrams                       # 可省略 project_id：创建库内未绑定图纸
+POST /api/diagrams/import                # 上传画布 JSON，解析节点索引；同样可不绑定
+POST /api/diagrams/<did>/duplicate        # 复制画布与节点（不复制任务关联）
+PATCH /api/diagrams/<did> {project_id}    # 绑定 / 移动到另一个项目
+```
+
+拓扑图库支持未绑定项目的图纸（`diagrams.project_id IS NULL`），库内可直接打开编辑器（`/diagrams/<did>`）。绑定到新项目时，服务端会删除跨项目的 `node_task_links` 与 `task_diagrams`，并清空失去任务的节点角标，保证项目隔离。
+
+旧数据库启动时由 `db.migrate_schema()` 重建 `diagrams` 表，把 `project_id` 从 `NOT NULL` 改为可空，保留原有数据与子表外键。
+
+编辑器顶部提供「导出 JSON」，导出当前画布（去除运行时 `tt` 元数据）为 `.vweb.json`，可直接用于拓扑图库或项目页的「导入拓扑图」。
 
 ---
 

@@ -34,7 +34,9 @@ def overview():
     )
     diagrams = db.execute("SELECT COUNT(*) AS n FROM diagrams").fetchone()["n"]
     followups = db.execute(
-        "SELECT COUNT(*) AS n FROM diagram_nodes WHERE followup_status IN ('todo','doing')"
+        """SELECT COUNT(*) AS n FROM diagram_nodes dn
+           JOIN diagrams d ON d.id=dn.diagram_id
+           WHERE d.project_id IS NOT NULL AND dn.followup_status IN ('todo','doing')"""
     ).fetchone()["n"]
 
     stage_stats = []

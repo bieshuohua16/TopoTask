@@ -7557,7 +7557,7 @@ window.TOPOTASH_CTX = (function(){
   try {
     var p = new URLSearchParams(location.search);
     var pid = p.get('project_id'), did = p.get('diagram_id');
-    return (pid && did) ? { projectId: pid, diagramId: did, node: p.get('node') || '' } : null;
+    return did ? { projectId: pid || null, diagramId: did, node: p.get('node') || '' } : null;
   } catch(e) { return null; }
 })();
 </script>

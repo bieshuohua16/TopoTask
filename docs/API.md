@@ -277,7 +277,7 @@ DELETE /api/tasks/<task_id>/subtasks/<subtask_id>
 
 ### `GET /api/diagrams`
 
-参数：`project_id`、`q`。响应：
+参数：`project_id`、`unbound=1`、`q`。`unbound=1` 只返回未绑定项目的图纸。响应：
 
 ```json
 {
@@ -294,13 +294,32 @@ DELETE /api/tasks/<task_id>/subtasks/<subtask_id>
 }
 ```
 
+未绑定项目的图纸 `project_id` 为 `null`、`project_name` 为空字符串。
+
 ### `POST /api/diagrams`
 
 ```json
 { "project_id": "p_xxx", "name": "POC 部署图", "kind": "deployment", "description": "…" }
 ```
 
-可选传 `content`（完整画布 JSON）；不传则创建空白画布。
+`project_id` 可省略或传 `null`，此时图纸只存在拓扑图库、不绑定项目。可选传 `content`（完整画布 JSON）；不传则创建空白画布。
+
+### `POST /api/diagrams/import`
+
+从画布 JSON（例如编辑器导出的 `.vweb.json`）导入一张拓扑图：
+
+```json
+{
+  "project_id": "p_xxx",
+  "source_name": "gpu_cluster_topology.vweb.json",
+  "name": "GPU 集群拓扑（可省略，默认取文件名）",
+  "kind": "topology",
+  "description": "可省略，默认记录来源文件",
+  "content": { "shapes": { "n1": {} }, "order": ["n1"], "groups": {}, "imagePool": {} }
+}
+```
+
+`project_id` 可省略（导入到拓扑图库、不绑定项目）。`content` 必须含 `shapes` 对象，否则返回 `400 invalid_content`。服务端会去除运行时 `tt` 元数据、解析节点索引；同名图纸自动追加序号（`xxx (2)`）。成功返回 `201` 与图纸对象。
 
 ### `GET /api/diagrams/<diagram_id>`
 
@@ -308,7 +327,17 @@ DELETE /api/tasks/<task_id>/subtasks/<subtask_id>
 
 ### `PATCH /api/diagrams/<diagram_id>`
 
-`name/kind/description` 任意子集。
+`name/kind/description/project_id` 任意子集。传 `project_id` 即把图纸绑定 / 移动到另一个项目；跨项目的节点任务关联与任务级图纸关联会自动解除，并在两个项目的动态中各记一条日志。响应额外包含 `project_name`。
+
+### `POST /api/diagrams/<diagram_id>/duplicate`
+
+复制一张拓扑图：
+
+```json
+{ "name": "POC 部署图 副本（可省略）", "project_id": "p_xxx（可省略，默认同项目；原图未绑定时仍不绑定）" }
+```
+
+复制画布与节点索引；不复制节点任务关联和任务级图纸关联。返回 `201` 与新图纸对象。
 
 ### `DELETE /api/diagrams/<diagram_id>`
 

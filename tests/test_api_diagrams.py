@@ -7,13 +7,28 @@ from tests.support import ApiTestCase, canvas, shape
 
 class DiagramApiTest(ApiTestCase):
     # ------------------------------------------------------------ documents
-    def test_create_requires_project(self):
-        response = self.client.post("/api/diagrams", json={"name": "x"})
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.get_json()["error"]["code"], "project_required")
+    def test_create_without_project_is_library_only(self):
+        response = self.client.post("/api/diagrams", json={"name": "库图"})
+        self.assertEqual(response.status_code, 201, response.get_json())
+        diagram = response.get_json()
+        self.assertIsNone(diagram["project_id"])
+
+        unbound = self.get_json("/api/diagrams?unbound=1")
+        self.assertEqual([d["id"] for d in unbound["items"]], [diagram["id"]])
+        self.assertEqual(unbound["items"][0]["project_name"], "")
+        self.assertEqual(self.get_json("/api/diagrams")["total"], 1)
+
+        detail = self.get_json(f"/api/diagrams/{diagram['id']}")
+        self.assertEqual(detail["project_name"], "")
+        self.assertIsNone(detail["project_id"])
 
         missing = self.client.post("/api/diagrams", json={"project_id": "p_missing"})
         self.assertEqual(missing.status_code, 404)
+
+    def test_create_with_project_still_validates_it(self):
+        project = self.new_project()
+        diagram = self.new_diagram(project["id"])
+        self.assertEqual(diagram["project_id"], project["id"])
 
     def test_create_without_content_uses_empty_canvas(self):
         project = self.new_project()
@@ -97,6 +112,184 @@ class DiagramApiTest(ApiTestCase):
         self.assertEqual(
             get_db().execute("SELECT COUNT(*) AS n FROM diagram_nodes").fetchone()["n"], 0
         )
+
+    # ------------------------------------------------------ import / duplicate
+    def test_import_canvas_json(self):
+        project = self.new_project()
+        doc = canvas(
+            shape("n1", "导入节点", tt={"status": "done"}),
+            shape("e1", "连线", type="connector"),
+        )
+        imported = self.api(
+            "POST",
+            "/api/diagrams/import",
+            {"project_id": project["id"], "source_name": "gpu_cluster.vweb.json", "content": doc},
+            status=201,
+        )
+        self.assertEqual(imported["name"], "gpu cluster")
+        self.assertEqual(imported["kind"], "topology")
+        self.assertEqual(imported["node_count"], 1)
+        self.assertIn("gpu_cluster.vweb.json", imported["description"])
+        self.assertTrue(imported["project_id"] == project["id"])
+
+        nodes = self.get_json(f"/api/diagrams/{imported['id']}/nodes")["items"]
+        self.assertEqual([n["node_key"] for n in nodes], ["n1"])
+
+        raw = get_db().execute(
+            "SELECT content_json FROM diagrams WHERE id=?", (imported["id"],)
+        ).fetchone()["content_json"]
+        self.assertNotIn('"tt"', raw)
+
+        # Repeated imports get a distinct name instead of overwriting.
+        again = self.api(
+            "POST",
+            "/api/diagrams/import",
+            {"project_id": project["id"], "source_name": "gpu_cluster.vweb.json", "content": doc},
+            status=201,
+        )
+        self.assertEqual(again["name"], "gpu cluster (2)")
+
+        named = self.api(
+            "POST",
+            "/api/diagrams/import",
+            {
+                "project_id": project["id"],
+                "name": "自定义导入图",
+                "kind": "deployment",
+                "source_name": "x.json",
+                "content": doc,
+            },
+            status=201,
+        )
+        self.assertEqual(named["name"], "自定义导入图")
+        self.assertEqual(named["kind"], "deployment")
+
+    def test_import_validation(self):
+        project = self.new_project()
+        unbound = self.api(
+            "POST",
+            "/api/diagrams/import",
+            {"source_name": "library_only.vweb.json", "content": canvas()},
+            status=201,
+        )
+        self.assertIsNone(unbound["project_id"])
+        self.assertEqual(unbound["name"], "library only")
+
+        unknown_project = self.client.post(
+            "/api/diagrams/import", json={"project_id": "p_missing", "content": canvas()}
+        )
+        self.assertEqual(unknown_project.status_code, 404)
+
+        for bad in ({}, {"shapes": []}, {"shapes": "nope"}):
+            response = self.client.post(
+                "/api/diagrams/import", json={"project_id": project["id"], "content": bad}
+            )
+            self.assertEqual(response.status_code, 400)
+            self.assertEqual(response.get_json()["error"]["code"], "invalid_content")
+
+    def test_duplicate_diagram_copies_canvas_without_task_links(self):
+        project = self.new_project()
+        task = self.new_task(project["id"], title="部署验证")
+        diagram = self.new_diagram(
+            project["id"], canvas(shape("n1", "节点")), name="POC 图", kind="deployment"
+        )
+        self.api("POST", f"/api/diagrams/{diagram['id']}/nodes/n1/followup", {"task_id": task["id"]})
+        self.api("POST", f"/api/tasks/{task['id']}/diagrams", {"diagram_id": diagram["id"]}, status=201)
+
+        copied = self.api("POST", f"/api/diagrams/{diagram['id']}/duplicate", {}, status=201)
+        self.assertNotEqual(copied["id"], diagram["id"])
+        self.assertEqual(copied["name"], "POC 图 副本")
+        self.assertEqual(copied["kind"], "deployment")
+        self.assertEqual(copied["project_id"], project["id"])
+        self.assertEqual(copied["node_count"], 1)
+        self.assertEqual(copied["linked_task_count"], 0)
+        self.assertEqual(copied["task_link_count"], 0)
+
+        nodes = self.get_json(f"/api/diagrams/{copied['id']}/nodes")["items"]
+        self.assertEqual([n["node_key"] for n in nodes], ["n1"])
+        self.assertEqual(nodes[0]["followup_status"], "none")
+        original = self.get_json(f"/api/diagrams/{diagram['id']}/nodes")["items"]
+        self.assertEqual(original[0]["followup_status"], "todo")
+
+        # Copying into another project is supported too.
+        other = self.new_project(name="另一个项目")
+        moved = self.api(
+            "POST",
+            f"/api/diagrams/{diagram['id']}/duplicate",
+            {"project_id": other["id"], "name": "跨项目副本"},
+            status=201,
+        )
+        self.assertEqual(moved["project_id"], other["id"])
+        self.assertEqual(moved["name"], "跨项目副本")
+
+        missing = self.client.post(f"/api/diagrams/{diagram['id']}/duplicate", json={"project_id": "p_missing"})
+        self.assertEqual(missing.status_code, 404)
+        self.assertEqual(self.client.post("/api/diagrams/d_missing/duplicate", json={}).status_code, 404)
+
+    def test_bind_diagram_to_project_drops_cross_project_links(self):
+        project = self.new_project()
+        other = self.new_project(name="另一个项目")
+        task = self.new_task(project["id"], title="部署验证")
+        diagram = self.new_diagram(project["id"], canvas(shape("n1", "节点")))
+        self.api("POST", f"/api/diagrams/{diagram['id']}/nodes/n1/followup", {"task_id": task["id"]})
+        self.api("POST", f"/api/tasks/{task['id']}/diagrams", {"diagram_id": diagram["id"]}, status=201)
+
+        bound = self.api(
+            "PATCH", f"/api/diagrams/{diagram['id']}", {"project_id": other["id"]}
+        )
+        self.assertEqual(bound["project_id"], other["id"])
+        self.assertEqual(bound["project_name"], "另一个项目")
+        self.assertEqual(bound["linked_task_count"], 0)
+        self.assertEqual(bound["task_link_count"], 0)
+
+        nodes = self.get_json(f"/api/diagrams/{diagram['id']}/nodes")["items"]
+        self.assertEqual(nodes[0]["followup_status"], "none")
+        self.assertEqual(
+            get_db().execute(
+                "SELECT COUNT(*) AS n FROM node_task_links WHERE diagram_id=?", (diagram["id"],)
+            ).fetchone()["n"],
+            0,
+        )
+        self.assertEqual(
+            [d["id"] for d in self.get_json(f"/api/diagrams?project_id={other['id']}")["items"]],
+            [diagram["id"]],
+        )
+        self.assertEqual(self.get_json(f"/api/diagrams?project_id={project['id']}")["items"], [])
+
+        missing = self.client.patch(
+            f"/api/diagrams/{diagram['id']}", json={"project_id": "p_missing"}
+        )
+        self.assertEqual(missing.status_code, 404)
+        blank = self.client.patch(f"/api/diagrams/{diagram['id']}", json={"project_id": " "})
+        self.assertEqual(blank.status_code, 400)
+        self.assertEqual(blank.get_json()["error"]["code"], "project_required")
+
+    def test_duplicate_and_bind_unbound_diagram(self):
+        project = self.new_project()
+        unbound = self.client.post(
+            "/api/diagrams", json={"name": "库图", "content": canvas(shape("n1", "节点"))}
+        ).get_json()
+        self.assertIsNone(unbound["project_id"])
+
+        copied = self.api("POST", f"/api/diagrams/{unbound['id']}/duplicate", {}, status=201)
+        self.assertIsNone(copied["project_id"])
+        self.assertEqual(copied["name"], "库图 副本")
+        self.assertEqual(copied["node_count"], 1)
+
+        again = self.api("POST", f"/api/diagrams/{unbound['id']}/duplicate", {}, status=201)
+        self.assertEqual(again["name"], "库图 副本 (2)")
+
+        bound = self.api("PATCH", f"/api/diagrams/{unbound['id']}", {"project_id": project["id"]})
+        self.assertEqual(bound["project_id"], project["id"])
+        self.assertEqual(bound["project_name"], "测试项目")
+        unbound_ids = {d["id"] for d in self.get_json("/api/diagrams?unbound=1")["items"]}
+        self.assertEqual(unbound_ids, {copied["id"], again["id"]})
+        self.assertNotIn(unbound["id"], unbound_ids)
+        self.assertEqual(
+            [d["id"] for d in self.get_json(f"/api/diagrams?project_id={project['id']}")["items"]],
+            [unbound["id"]],
+        )
+
 
     # ------------------------------------------------------------- content
     def test_save_content_updates_version_and_prunes_nodes(self):

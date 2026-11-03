@@ -115,7 +115,11 @@ class PageRoutesTest(ApiTestCase):
         self.assertIn("js/dashboard.js", html)
 
         self.assertIn("阶段看板", self.client.get("/board").get_data(as_text=True))
-        self.assertIn("拓扑图库", self.client.get("/diagrams").get_data(as_text=True))
+        library_html = self.client.get("/diagrams").get_data(as_text=True)
+        self.assertIn("拓扑图库", library_html)
+        self.assertIn("新建拓扑图", library_html)
+        self.assertIn("导入拓扑图", library_html)
+        self.assertIn("js/diagram-actions.js", library_html)
 
         project_page = self.client.get(f"/projects/{project['id']}")
         self.assertEqual(project_page.status_code, 200)
@@ -123,6 +127,8 @@ class PageRoutesTest(ApiTestCase):
         self.assertIn("页面项目", project_html)
         self.assertIn("window.TT_PROJECT", project_html)
         self.assertIn("js/tasks.js", project_html)
+        self.assertIn("导入拓扑图", project_html)
+        self.assertIn("js/diagram-actions.js", project_html)
 
         editor = self.client.get(f"/projects/{project['id']}/diagrams/{diagram['id']}")
         self.assertEqual(editor.status_code, 200)
@@ -130,6 +136,35 @@ class PageRoutesTest(ApiTestCase):
         self.assertIn("页面拓扑图", editor_html)
         self.assertIn("window.TT_EDITOR", editor_html)
         self.assertIn(f"diagram_id={diagram['id']}", editor_html)
+        self.assertIn("导出 JSON", editor_html)
+
+    def test_library_only_diagram_editor(self):
+        project = self.new_project(name="页面项目")
+        unbound = self.client.post(
+            "/api/diagrams", json={"name": "未绑定库图", "content": canvas(shape("n1", "节点"))}
+        ).get_json()
+
+        response = self.client.get(f"/diagrams/{unbound['id']}")
+        self.assertEqual(response.status_code, 200)
+        html = response.get_data(as_text=True)
+        self.assertIn("未绑定库图", html)
+        self.assertIn("未绑定项目", html)
+        self.assertIn("导出 JSON", html)
+        self.assertIn("返回拓扑图库", html)
+        self.assertIn("project: null", html)
+        self.assertIn("diagram_id=", html)
+
+        missing = self.client.get("/diagrams/d_missing")
+        self.assertEqual(missing.status_code, 302)
+        self.assertEqual(missing.headers["Location"], "/diagrams")
+
+        bound = self.new_diagram(project["id"], name="项目图")
+        redirect = self.client.get(f"/diagrams/{bound['id']}")
+        self.assertEqual(redirect.status_code, 302)
+        self.assertEqual(
+            redirect.headers["Location"],
+            f"/projects/{project['id']}/diagrams/{bound['id']}",
+        )
 
     def test_missing_pages_redirect_to_dashboard(self):
         response = self.client.get("/projects/p_missing")
@@ -147,7 +182,10 @@ class PageRoutesTest(ApiTestCase):
             "/static/js/api.js",
             "/static/js/ai.js",
             "/static/js/tasks.js",
+            "/static/js/diagram-actions.js",
+            "/static/js/editor.js",
             "/static/apps/topology/index.html",
+            "/static/apps/topology/topotash-topology-bridge.js",
             "/static/favicon.svg",
         ):
             response = self.client.get(path)

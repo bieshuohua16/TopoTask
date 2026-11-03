@@ -4,7 +4,9 @@ Run: python app.py seed-demo   (safe: skips when projects already exist)
 """
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from db import dumps, get_db, new_id, utcnow
 from services import create_task_record, sync_diagram_nodes
@@ -13,6 +15,11 @@ STAGE_RESEARCH = "research"
 STAGE_PROPOSAL = "proposal"
 STAGE_POC = "poc"
 STAGE_BIDDING = "bidding"
+
+DATA_DIR = Path(__file__).resolve().parent / "data"
+# 真实画布存档：GPU 服务器集群物理拓扑（visioweb 的 .vweb.json）
+GPU_CLUSTER_ARCHIVE = "gpu_cluster_topology.vweb.json"
+GPU_CLUSTER_NAME = "GPU 服务器集群拓扑"
 
 
 def _iso(days: int, hour: int = 18) -> str:
@@ -102,6 +109,26 @@ def _diagram(pid, name, kind, description, shapes, edges):
     return did
 
 
+def _diagram_from_archive(pid, filename, name, kind, description):
+    """Import a real ``.vweb.json`` canvas archive shipped in ``tools/data``."""
+    db = get_db()
+    content = json.loads((DATA_DIR / filename).read_text(encoding="utf-8"))
+    did = new_id("d_")
+    now = utcnow()
+    node_count = len(
+        [s for s in content["shapes"].values() if isinstance(s, dict) and s.get("type") == "shape"]
+    )
+    db.execute(
+        """INSERT INTO diagrams
+           (id, project_id, name, kind, description, content_json, version, node_count, created_at, updated_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?)""",
+        (did, pid, name, kind, description, dumps(content), int(content.get("version") or 2),
+         node_count, now, now),
+    )
+    sync_diagram_nodes(did, content)
+    return did
+
+
 def _link_node(did, node_key, task_id, status, diagram_for_task=True):
     db = get_db()
     db.execute(
@@ -183,6 +210,12 @@ def seed_demo() -> int:
         _connector("c3", "n3", "n4"), _connector("c4", "n3", "n5"),
     ]
     _diagram(pid, "私有云逻辑架构", "architecture", "目标态私有云逻辑分区与管理面关系。", shapes2, edges2)
+
+    # 真实存档：8 台 8 卡 GPU 服务器 + 交换机 / 存储的物理互联，随示例数据一起提供。
+    _diagram_from_archive(
+        pid, GPU_CLUSTER_ARCHIVE, GPU_CLUSTER_NAME, "topology",
+        "由 visioweb 画布存档导入：8 台 8 卡 GPU 服务器与交换机、存储的物理互联。",
+    )
 
     # -------------------------------------------------------------- 2 方案
     pid2, cid2 = _project(

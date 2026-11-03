@@ -113,7 +113,7 @@ CREATE INDEX IF NOT EXISTS idx_task_tags_tag ON task_tags(tag_id);
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS diagrams (
     id           TEXT PRIMARY KEY,
-    project_id   TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    project_id   TEXT REFERENCES projects(id) ON DELETE CASCADE,  -- NULL = 仅存放在拓扑图库
     name         TEXT NOT NULL,
     kind         TEXT NOT NULL DEFAULT 'topology',   -- topology | architecture | deployment | other
     description  TEXT NOT NULL DEFAULT '',
@@ -255,4 +255,4 @@ CREATE TABLE IF NOT EXISTS ai_actions (
 );
 CREATE INDEX IF NOT EXISTS idx_ai_actions_conv ON ai_actions(conversation_id, status);
 
-INSERT OR REPLACE INTO app_meta(key, value) VALUES ('schema_version', '2');
+INSERT OR REPLACE INTO app_meta(key, value) VALUES ('schema_version', '3');

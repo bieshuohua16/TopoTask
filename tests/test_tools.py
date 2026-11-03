@@ -19,7 +19,7 @@ class SeedDemoTest(ApiTestCase):
 
         db = get_db()
         self.assertEqual(db.execute("SELECT COUNT(*) AS n FROM projects").fetchone()["n"], 4)
-        self.assertEqual(db.execute("SELECT COUNT(*) AS n FROM diagrams").fetchone()["n"], 4)
+        self.assertEqual(db.execute("SELECT COUNT(*) AS n FROM diagrams").fetchone()["n"], 5)
         self.assertEqual(db.execute("SELECT COUNT(*) AS n FROM tasks").fetchone()["n"], 23)
         self.assertEqual(db.execute("SELECT COUNT(*) AS n FROM node_task_links").fetchone()["n"], 5)
         self.assertEqual(
@@ -29,10 +29,25 @@ class SeedDemoTest(ApiTestCase):
             5,
         )
 
+        # The real .vweb.json archive is seeded as a fifth, fully indexed diagram.
+        gpu = db.execute("SELECT * FROM diagrams WHERE name='GPU 服务器集群拓扑'").fetchone()
+        self.assertIsNotNone(gpu)
+        self.assertEqual(gpu["kind"], "topology")
+        self.assertEqual(gpu["node_count"], 46)
+        self.assertEqual(
+            db.execute(
+                "SELECT COUNT(*) AS n FROM diagram_nodes WHERE diagram_id=?", (gpu["id"],)
+            ).fetchone()["n"],
+            46,
+        )
+        content = json.loads(gpu["content_json"])
+        self.assertEqual(len(content["shapes"]), 117)
+        self.assertEqual(len(content["groups"]), 4)
+
         overview = self.get_json("/api/views/overview")
         self.assertEqual(overview["project_total"], 4)
         self.assertEqual(overview["task_total"], 23)
-        self.assertEqual(overview["diagram_total"], 4)
+        self.assertEqual(overview["diagram_total"], 5)
         self.assertEqual(overview["followup_total"], 5)
 
         # Seeding again is a no-op.
