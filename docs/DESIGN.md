@@ -330,7 +330,7 @@ POST /api/diagrams/<did>/nodes/<node_key>/followup
 
 ### 4.3 拓扑图库操作
 
-拓扑图库页面（`/diagrams`）和项目「拓扑图」标签页共用 `static/js/diagram-actions.js`：
+拓扑图库页面（`/diagrams`）和项目「拓扑图」标签页共用 `static/js/diagram-actions.js`；卡片缩略图由 `static/js/diagram-thumbs.js` 按 `kind` 输出四种 SVG 场景（逻辑拓扑 / 系统架构 / 部署图 / 其他），不依赖画布内容或额外图片资源。
 
 ```
 POST /api/diagrams                       # 可省略 project_id：创建库内未绑定图纸
@@ -542,7 +542,7 @@ python tools/migrate_json.py --todo data/todos.json --visio data/diagrams --visi
 
 **后续可做**：
 
-1. 拓扑图真实缩略图（保存时前端导出 PNG，服务端存文件 / 缩略图字段）。
+1. 真实画布缩略图（当前按 `kind` 使用类型插画；后续可在保存时前端导出 PNG，服务端存文件 / 缩略图字段）。
 2. 冲突检测：`PUT content` 带上客户端 `version`，不匹配返回 409。
 3. 任务拖拽到阶段看板列 → PATCH `stage`，实现看板双向操作。
 4. 项目归档 / 模板 / 导入导出整包（项目 + 图 + 任务）。

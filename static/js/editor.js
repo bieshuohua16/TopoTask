@@ -33,6 +33,23 @@
     setStatus('saving', '正在导出 JSON…');
   };
 
+  const deleteBtn = document.getElementById('btnDeleteDiagram');
+  if (deleteBtn) deleteBtn.onclick = () => {
+    const editor = window.TT_EDITOR || {};
+    const diagram = editor.diagram || {};
+    const after = editor.project
+      ? `/projects/${editor.project.id}?tab=diagrams`
+      : '/diagrams';
+    TT.confirm(
+      `删除拓扑图《${diagram.name || '未命名拓扑图'}》？画布、节点跟进标记以及它与任务的关联会一并删除，且不可恢复。`,
+      async () => {
+        await TT.api(`/api/diagrams/${encodeURIComponent(diagram.id)}`, { method: 'DELETE' });
+        location.href = after;
+      },
+      { title: '删除拓扑图', submitText: '删除' }
+    );
+  };
+
   window.addEventListener('message', (ev) => {
     if (ev.origin !== location.origin || ev.source !== frame.contentWindow) return;
     const msg = ev.data || {};

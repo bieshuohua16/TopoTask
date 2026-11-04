@@ -120,21 +120,41 @@
       if (ib) ib.onclick = importDiagram;
       return;
     }
-    grid.innerHTML = diagrams.map(d => `
+    grid.innerHTML = diagrams.map(d => {
+      const thumb = window.TTDiagramThumbs
+        ? window.TTDiagramThumbs.forKind(d.kind)
+        : TT.icon.diagram;
+      return `
       <article class="diagram-card" data-id="${d.id}">
         <div class="diagram-thumb">
+          ${thumb}
           <span class="kind-tag">${TT.esc(KINDS[d.kind] || d.kind || '拓扑图')}</span>
           ${d.followup_count ? `<span class="followup-tag">${d.followup_count} 待跟进</span>` : ''}
-          ${TT.icon.diagram}
         </div>
         <div class="diagram-info">
           <b>${TT.esc(d.name)}</b>
           <span>${d.node_count || 0} 个节点 · ${d.linked_task_count || 0} 个关联任务</span>
           <div class="di-meta"><span>${TT.relative(d.updated_at)}</span><span>v${d.version}</span></div>
+          <div class="di-card-actions">
+            <button type="button" data-act="open">打开画布</button>
+            <button type="button" data-act="delete" class="danger" title="删除这张拓扑图">删除</button>
+          </div>
         </div>
-      </article>`).join('');
+      </article>`;
+    }).join('');
     grid.querySelectorAll('.diagram-card').forEach(el => {
-      el.onclick = () => { location.href = `/projects/${PROJECT_ID}/diagrams/${el.dataset.id}`; };
+      const d = diagrams.find(item => item.id === el.dataset.id);
+      if (!d) return;
+      el.onclick = () => { location.href = `/projects/${PROJECT_ID}/diagrams/${d.id}`; };
+      const open = el.querySelector('[data-act="open"]');
+      if (open) open.onclick = (ev) => { ev.stopPropagation(); el.click(); };
+      const del = el.querySelector('[data-act="delete"]');
+      if (del) del.onclick = (ev) => {
+        ev.stopPropagation();
+        if (window.TTDiagrams) {
+          window.TTDiagrams.remove({ diagram: d, onDone: () => loadProject() });
+        }
+      };
     });
   }
 

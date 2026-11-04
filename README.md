@@ -30,6 +30,10 @@ TopoTash 是一个自带后端的完整 Web 应用。每个项目下有多个任
 |---|---|
 | ![拓扑编辑器](docs/screenshots/06-editor.png) | ![关联视图](docs/screenshots/07-links.png) |
 
+| 拓扑图类型缩略图（逻辑拓扑 / 系统架构 / 部署图 / 其他） |
+|---|
+| ![类型缩略图](docs/screenshots/08-diagram-thumbnails.png) |
+
 ## 快速开始
 
 环境：Python 3.10+（当前测试环境为 3.12），浏览器用 Chrome / Edge。
@@ -163,7 +167,7 @@ TopoTash/
 │   ├── topotash.ico            # 快捷方式图标（首次启动向导生成）
 │   ├── css/topotash.css
 │   ├── css/ai.css              # 全局 AI 抽屉与草稿卡片
-│   ├── js/                     # shell / dashboard / board / project / tasks / editor / ai
+│   ├── js/                     # shell / dashboard / board / project / tasks / editor / ai / diagram-thumbs / diagram-actions
 │   └── apps/
 │       ├── topology/           # 内置拓扑编辑器 + 桥接
 │       └── tasks/              # 旧版任务台兼容页（不再有入口，仅供旧数据回看）

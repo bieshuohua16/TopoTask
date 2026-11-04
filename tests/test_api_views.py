@@ -119,6 +119,7 @@ class PageRoutesTest(ApiTestCase):
         self.assertIn("拓扑图库", library_html)
         self.assertIn("新建拓扑图", library_html)
         self.assertIn("导入拓扑图", library_html)
+        self.assertIn("js/diagram-thumbs.js", library_html)
         self.assertIn("js/diagram-actions.js", library_html)
 
         project_page = self.client.get(f"/projects/{project['id']}")
@@ -128,6 +129,7 @@ class PageRoutesTest(ApiTestCase):
         self.assertIn("window.TT_PROJECT", project_html)
         self.assertIn("js/tasks.js", project_html)
         self.assertIn("导入拓扑图", project_html)
+        self.assertIn("js/diagram-thumbs.js", project_html)
         self.assertIn("js/diagram-actions.js", project_html)
 
         editor = self.client.get(f"/projects/{project['id']}/diagrams/{diagram['id']}")
@@ -137,6 +139,8 @@ class PageRoutesTest(ApiTestCase):
         self.assertIn("window.TT_EDITOR", editor_html)
         self.assertIn(f"diagram_id={diagram['id']}", editor_html)
         self.assertIn("导出 JSON", editor_html)
+        self.assertIn("btnDeleteDiagram", editor_html)
+        self.assertIn("js/api.js", editor_html)
 
     def test_library_only_diagram_editor(self):
         project = self.new_project(name="页面项目")
@@ -150,6 +154,7 @@ class PageRoutesTest(ApiTestCase):
         self.assertIn("未绑定库图", html)
         self.assertIn("未绑定项目", html)
         self.assertIn("导出 JSON", html)
+        self.assertIn("btnDeleteDiagram", html)
         self.assertIn("返回拓扑图库", html)
         self.assertIn("project: null", html)
         self.assertIn("diagram_id=", html)
@@ -182,6 +187,7 @@ class PageRoutesTest(ApiTestCase):
             "/static/js/api.js",
             "/static/js/ai.js",
             "/static/js/tasks.js",
+            "/static/js/diagram-thumbs.js",
             "/static/js/diagram-actions.js",
             "/static/js/editor.js",
             "/static/apps/topology/index.html",

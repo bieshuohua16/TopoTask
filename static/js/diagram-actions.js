@@ -209,5 +209,25 @@
     });
   }
 
-  window.TTDiagrams = { KINDS, create: createDiagram, importDiagram, duplicate: duplicateDiagram, bind: bindDiagram };
+  // ------------------------------------------------------------------ delete
+  function removeDiagram({ diagram, onDone }) {
+    TT.confirm(
+      `删除拓扑图《${diagram.name}》？画布、节点跟进标记以及它与任务的关联会一并删除，且不可恢复。`,
+      async () => {
+        await TT.api(`/api/diagrams/${encodeURIComponent(diagram.id)}`, { method: 'DELETE' });
+        toast(`已删除《${diagram.name}》`);
+        if (onDone) onDone();
+      },
+      { title: '删除拓扑图', submitText: '删除' }
+    );
+  }
+
+  window.TTDiagrams = {
+    KINDS,
+    create: createDiagram,
+    importDiagram,
+    duplicate: duplicateDiagram,
+    bind: bindDiagram,
+    remove: removeDiagram
+  };
 })();

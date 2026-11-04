@@ -31,18 +31,24 @@
     <svg viewBox="0 0 24 24" fill="none"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg>
     导出 JSON
   </button>
+  <button class="btn btn-ghost btn-sm editor-danger" id="btnDeleteDiagram" type="button" title="删除这张拓扑图">
+    删除
+  </button>
   <a class="btn btn-ghost btn-sm" target="_blank" href="/static/apps/topology/index.html?diagram_id={{ diagram.id }}{% if project %}&project_id={{ project.id }}{% endif %}">独立窗口</a>
 </div>
 <div class="editor-frame">
   <iframe id="visioFrame" title="拓扑图编辑器"
           src="/static/apps/topology/index.html?diagram_id={{ diagram.id }}{% if project %}&project_id={{ project.id }}{% endif %}"></iframe>
 </div>
+<div class="modal-root" id="modalRoot"></div>
+<div class="toast-root" id="toastRoot"></div>
 <script>
 window.TT_EDITOR = {
   project: {% if project %}{{ project|tojson }}{% else %}null{% endif %},
   diagram: {{ diagram|tojson }}
 };
 </script>
+<script src="{{ url_for('static', filename='js/api.js') }}"></script>
 <script src="{{ url_for('static', filename='js/editor.js') }}"></script>
 </body>
 </html>

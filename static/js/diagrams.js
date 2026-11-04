@@ -9,12 +9,15 @@
   let items = [];
 
   function card(d) {
+    const thumb = window.TTDiagramThumbs
+      ? window.TTDiagramThumbs.forKind(d.kind)
+      : TT.icon.diagram;
     return `
       <article class="diagram-card" data-project="${TT.esc(d.project_id)}" data-id="${TT.esc(d.id)}">
         <div class="diagram-thumb">
+          ${thumb}
           <span class="kind-tag">${TT.esc(KINDS[d.kind] || d.kind || '拓扑图')}</span>
           ${d.followup_count ? `<span class="followup-tag">${d.followup_count} 待跟进</span>` : ''}
-          ${TT.icon.diagram}
         </div>
         <div class="diagram-info">
           <b>${TT.esc(d.name)}</b>
@@ -23,6 +26,7 @@
           <div class="di-card-actions">
             <button type="button" data-act="duplicate" title="复制这张拓扑图">复制</button>
             <button type="button" data-act="bind" title="把这张拓扑图绑定到其他项目">绑定项目</button>
+            <button type="button" data-act="delete" class="danger" title="删除这张拓扑图">删除</button>
           </div>
         </div>
       </article>`;
@@ -68,6 +72,8 @@
                 ACT.duplicate({ diagram: d, projects, onDone: load });
               } else if (btn.dataset.act === 'bind') {
                 ACT.bind({ diagram: d, projects, onDone: load });
+              } else if (btn.dataset.act === 'delete') {
+                ACT.remove({ diagram: d, onDone: load });
               }
             };
           });
