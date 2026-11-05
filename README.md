@@ -191,6 +191,7 @@ TopoTash/
 │   └── make_icon.py            # 生成 static/topotash.ico（纯标准库，无需 Pillow）
 ├── docs/
 │   ├── DESIGN.md               # 数据模型、Schema、API、前端架构
+│   ├── DESIGN-TEAM.md          # 多用户 / 团队 / 权限设计 + 宝塔部署方案（v1.1）
 │   ├── API.md                  # REST API 明细
 │   └── screenshots/
 ├── licenses/
