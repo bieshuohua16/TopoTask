@@ -20,6 +20,7 @@
       `<span>${TT.esc(p.customer || '未填写客户')}</span><i>·</i><span>${TT.esc(p.owner || '未指定负责人')}</span><i>·</i><span>更新于 ${TT.relative(p.updated_at)}</span>`;
     document.getElementById('tabTaskCount').textContent = p.task_total || 0;
     document.getElementById('tabDiagramCount').textContent = p.diagram_count || 0;
+    document.getElementById('tabDeviceCount').textContent = p.device_count || 0;
     document.title = p.name + ' · TopoTash 拓事';
   }
 
@@ -220,16 +221,20 @@
   function switchTab(tab, extra) {
     activeTab = tab;
     document.querySelectorAll('#projectTabs .tab').forEach(a => a.classList.toggle('active', a.dataset.tab === tab));
-    ['overview', 'tasks', 'diagrams', 'links'].forEach(t => {
+    ['overview', 'tasks', 'diagrams', 'links', 'devices'].forEach(t => {
       const el = document.getElementById('panel-' + t);
       if (el) el.classList.toggle('hidden', t !== tab);
     });
     const params = new URLSearchParams(location.search);
     params.set('tab', tab);
     if (extra && extra.task) params.set('task', extra.task); else params.delete('task');
+    if (extra && extra.device) params.set('device', extra.device); else params.delete('device');
     history.replaceState(null, '', '?' + params.toString());
     if (tab === 'tasks' && window.TTTasks) {
       window.TTTasks.show(PROJECT_ID, extra && extra.task, project);
+    }
+    if (tab === 'devices' && window.TTDevices) {
+      window.TTDevices.show(PROJECT_ID, { device: extra && extra.device });
     }
     if (tab === 'diagrams') {
       TT.api('/api/diagrams?project_id=' + encodeURIComponent(PROJECT_ID))
@@ -279,6 +284,7 @@
   if (importBtn) importBtn.onclick = importDiagram;
 
   document.addEventListener('tt:tasks-changed', () => { loadProject(); });
+  document.addEventListener('tt:devices-changed', () => { loadProject(); });
 
   window.addEventListener('message', (ev) => {
     if (ev.origin !== location.origin) return;
@@ -289,8 +295,9 @@
 
   loadProject().then(() => {
     const tab = TT.qs('tab');
-    if (tab && tab !== 'overview') switchTab(tab, { task: TT.qs('task') });
+    if (tab && tab !== 'overview') switchTab(tab, { task: TT.qs('task'), device: TT.qs('device') });
     else if (TT.qs('task')) switchTab('tasks', { task: TT.qs('task') });
+    else if (TT.qs('device')) switchTab('devices', { device: TT.qs('device') });
     else if (activeTab !== 'overview') switchTab(activeTab);
   });
 })();

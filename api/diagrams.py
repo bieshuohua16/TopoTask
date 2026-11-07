@@ -243,8 +243,11 @@ def get_diagram(diagram_id):
 
 
 def _drop_cross_project_links(diagram_id: str, project_id: str) -> None:
-    """Remove task links that no longer belong to the diagram's project."""
+    """Remove task/device links that no longer belong to the diagram's project."""
     db = get_db()
+    # Devices are project scoped; a diagram moving projects cannot keep its
+    # device associations. Remove them before reconciling task links.
+    db.execute("DELETE FROM device_node_links WHERE diagram_id=?", (diagram_id,))
     affected = [
         r["node_key"]
         for r in db.execute(

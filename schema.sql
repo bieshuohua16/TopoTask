@@ -255,4 +255,70 @@ CREATE TABLE IF NOT EXISTS ai_actions (
 );
 CREATE INDEX IF NOT EXISTS idx_ai_actions_conv ON ai_actions(conversation_id, status);
 
-INSERT OR REPLACE INTO app_meta(key, value) VALUES ('schema_version', '3');
+-- ----------------------------------------------------------------------------
+-- 16. 项目设备清单（方案级 BOM）
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS devices (
+    id          TEXT PRIMARY KEY,                  -- d_xxx
+    project_id  TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    name        TEXT NOT NULL,
+    category    TEXT NOT NULL DEFAULT 'other'
+                CHECK (category IN ('server','storage','network','security','software','other')),
+    brand       TEXT NOT NULL DEFAULT '',
+    model       TEXT NOT NULL DEFAULT '',
+    spec        TEXT NOT NULL DEFAULT '',          -- 关键参数 / 配置
+    quantity    INTEGER NOT NULL DEFAULT 1 CHECK (quantity >= 0),
+    unit        TEXT NOT NULL DEFAULT '台',         -- 台 / 套 / 节点 / 个 / 块
+    status      TEXT NOT NULL DEFAULT 'planned'
+                CHECK (status IN ('planned','selected','quoted','ordered','delivered')),
+    unit_price  REAL,                              -- 可空；空值不参与合计
+    currency    TEXT NOT NULL DEFAULT 'CNY',
+    vendor      TEXT NOT NULL DEFAULT '',
+    owner       TEXT NOT NULL DEFAULT '',
+    note        TEXT NOT NULL DEFAULT '',
+    sort_order  REAL NOT NULL DEFAULT 0,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_devices_project ON devices(project_id, sort_order, name);
+CREATE INDEX IF NOT EXISTS idx_devices_category ON devices(project_id, category);
+CREATE INDEX IF NOT EXISTS idx_devices_status ON devices(project_id, status);
+
+-- ----------------------------------------------------------------------------
+-- 17. 设备-拓扑节点关联（多对多；quantity 是本节点部署数量）
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS device_node_links (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    device_id   TEXT NOT NULL REFERENCES devices(id) ON DELETE CASCADE,
+    diagram_id  TEXT NOT NULL REFERENCES diagrams(id) ON DELETE CASCADE,
+    node_key    TEXT NOT NULL,
+    quantity    INTEGER NOT NULL DEFAULT 1 CHECK (quantity >= 0),
+    note        TEXT NOT NULL DEFAULT '',
+    created_at  TEXT NOT NULL,
+    UNIQUE (device_id, diagram_id, node_key)
+);
+CREATE INDEX IF NOT EXISTS idx_dnl_node ON device_node_links(diagram_id, node_key);
+CREATE INDEX IF NOT EXISTS idx_dnl_device ON device_node_links(device_id);
+
+-- ----------------------------------------------------------------------------
+-- 18. 全局设备模板（跨项目复用的设备预设，不绑定项目和数量）
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS device_templates (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    category    TEXT NOT NULL DEFAULT 'other'
+                CHECK (category IN ('server','storage','network','security','software','other')),
+    brand       TEXT NOT NULL DEFAULT '',
+    model       TEXT NOT NULL DEFAULT '',
+    spec        TEXT NOT NULL DEFAULT '',
+    unit        TEXT NOT NULL DEFAULT '台',
+    unit_price  REAL,
+    note        TEXT NOT NULL DEFAULT '',
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_device_templates_key
+    ON device_templates(name, brand, model);
+CREATE INDEX IF NOT EXISTS idx_device_templates_category ON device_templates(category, name);
+
+INSERT OR REPLACE INTO app_meta(key, value) VALUES ('schema_version', '5');

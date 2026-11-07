@@ -663,7 +663,187 @@ DELETE /api/tasks/<task_id>/subtasks/<subtask_id>
 
 ---
 
-## 6. 调用示例
+## 6. 设备清单 Devices
+
+设备属于项目；`device_node_links` 保存设备与拓扑节点的多对多关联，`quantity` 是本节点数量。
+
+### `GET /api/devices`
+
+查询参数：`project_id`（必填）、`category`、`status`、`q`、`linked=yes|no`。
+
+```json
+{
+  "items": [{
+    "id": "d_xxx", "name": "核心交换机", "category": "network", "category_label": "网络",
+    "brand": "华为", "model": "S12700E-8", "spec": "48×10GE",
+    "quantity": 2, "unit": "台", "status": "selected", "status_label": "已选型",
+    "unit_price": 168000, "currency": "CNY", "total": 336000,
+    "vendor": "华为技术有限公司", "owner": "张伟", "note": "",
+    "linked_nodes": [{
+      "device_id": "d_xxx", "diagram_id": "d_xxx", "diagram_name": "POC 环境部署图",
+      "node_key": "n3", "node_label": "核心交换机", "quantity": 2, "note": ""
+    }],
+    "linked_count": 1
+  }],
+  "total": 1,
+  "summary": {
+    "types": 8, "quantity": 19, "linked_types": 6,
+    "node_count": 5, "diagram_count": 1, "amount": 1574200
+  },
+  "categories": [{ "key": "server", "label": "服务器", "count": 1 }],
+  "statuses": [{ "key": "planned", "label": "规划中" }]
+}
+```
+
+`summary` 始终是项目全量，不受筛选影响；`items` 受筛选影响。
+
+### `POST /api/devices`
+
+```json
+{
+  "project_id": "p_xxx",
+  "name": "核心交换机", "category": "network",
+  "brand": "华为", "model": "S12700E-8", "spec": "48×10GE",
+  "quantity": 2, "unit": "台", "status": "selected",
+  "unit_price": 168000, "vendor": "华为技术有限公司", "owner": "张伟", "note": "",
+  "links": [{ "diagram_id": "d_xxx", "node_key": "n3", "quantity": 2 }]
+}
+```
+
+`name` 必填；`links` 可省略。返回 `201` + 设备对象。
+
+### `PATCH /api/devices/<device_id>`
+
+任意设备字段子集；`links` 若提供则**全量替换**节点关联：
+
+```json
+{ "status": "quoted", "links": [{ "diagram_id": "d_xxx", "node_key": "n3", "quantity": 2 }] }
+```
+
+### `DELETE /api/devices/<device_id>`
+
+级联删除设备与节点的关联；返回 `{ "deleted": true, "id": "...", "name": "..." }`。
+
+### 节点侧关联
+
+```
+POST   /api/diagrams/<diagram_id>/nodes/<node_key>/devices
+       { "device_id": "d_xxx" }
+       { "create_device": { "name": "边界防火墙", "category": "security", "quantity": 1 } }
+→ 201 { "node": { ..., "linked_devices": [...] }, "device": { ... } }
+
+DELETE /api/diagrams/<diagram_id>/nodes/<node_key>/devices/<device_id>
+→ 200 { "node": { ... }, "device": { ... } }
+```
+
+`POST` 未传 `quantity` 时默认等于设备数量。节点响应中的 `linked_devices` 会同时注入画布 `tt.devices`，供拓扑节点角标和属性面板使用；角标优先显示 `model`，无型号时显示 `name`，超过两个设备时显示 `+N`。
+
+### 设备侧关联
+
+```
+POST   /api/devices/<device_id>/nodes  { "diagram_id": "d_xxx", "node_key": "n3", "quantity": 2 }
+DELETE /api/devices/<device_id>/nodes/<diagram_id>/<node_key>
+```
+
+### `GET /api/projects/<project_id>/devices/summary`
+
+返回 `{ "types", "quantity", "linked_types", "node_count", "diagram_count", "amount" }`。
+
+### `GET /api/projects/<project_id>/devices/export.csv`
+
+导出 UTF-8 BOM CSV，列为：设备名称、类别、品牌、型号、关键参数、数量、单位、状态、单价、小计、供应商、负责人、备注、关联拓扑。响应带 `Content-Disposition: attachment`。
+
+---
+
+## 7. 设备模板 Device Templates
+
+全局设备模板，不绑定项目。模板不要求设备名称，按「品牌+型号」识别；`display_label` 是给选择器用的显示标签。模板字段：
+
+```json
+{
+  "id": "tpl_xxx",
+  "category": "network",
+  "brand": "华为",
+  "model": "S12700E-8",
+  "spec": "48×10GE, 8×100GE, 双主控",
+  "unit": "台",
+  "unit_price": 168000,
+  "note": "POC 主交换模板",
+  "created_at": "2026-11-07T01:00:00Z",
+  "updated_at": "2026-11-07T01:00:00Z",
+  "category_label": "网络",
+  "display_label": "华为 S12700E-8"
+}
+```
+
+### `GET /api/device-templates`
+
+查询参数：`category`（key 或中文）、`brand`、`q`（名称/品牌/型号/参数/备注）。
+
+```json
+{
+  "items": [...],
+  "total": 6,
+  "summary": { "total": 6, "categories": 5, "brands": 4, "updated_at": "..." },
+  "categories": [{ "key": "server", "label": "服务器", "count": 1 }, ...],
+  "brands": ["华为", "深信服", "浪潮"]
+}
+```
+
+### 模板 CRUD
+
+```
+POST   /api/device-templates
+PATCH  /api/device-templates/<template_id>
+GET    /api/device-templates/<template_id>
+DELETE /api/device-templates/<template_id>
+```
+
+`brand + model` 相同的模板会返回 `409 template_duplicate`；`category` 缺省为 `server`。删除模板不影响已创建的项目设备。
+
+### `GET /api/device-templates/sample.csv`
+
+下载标准导入 CSV（UTF-8 BOM，仅表头）：
+
+```
+类别,品牌,型号,关键参数,单位,参考单价,备注
+```
+
+### `POST /api/device-templates/import`
+
+`multipart/form-data`：
+
+```
+file      CSV 文件（≤2 MB，UTF-8 / UTF-8 BOM / GBK）
+mode      skip | overwrite（默认 skip）
+dry_run   1 只预览，不写入
+```
+
+也支持 JSON `{ "text": "...csv...", "mode": "skip", "dry_run": true }`（测试/脚本用）。
+
+预览响应：
+
+```json
+{
+  "items": [
+    { "row": 2, "name": "...", "category": "network", "category_label": "网络",
+      "status": "new|duplicate|invalid", "error": "" }
+  ],
+  "summary": { "total": 8, "new": 7, "duplicate": 1, "invalid": 0 }
+}
+```
+
+导入响应：
+
+```json
+{ "imported": 7, "updated": 0, "skipped": 1, "invalid": 0, "errors": [], "summary": {...} }
+```
+
+CSV 表头固定为 `类别,品牌,型号,关键参数,单位,参考单价,备注`；类别可写中文（服务器/存储/网络/安全/软件/其他）或英文 key。重复键是 `brand + model`。
+
+---
+
+## 8. 调用示例
 
 ```bash
 # 新建项目
@@ -702,6 +882,38 @@ curl -X POST http://127.0.0.1:5000/api/ai/chat \
 curl -X POST http://127.0.0.1:5000/api/ai/actions/a_xxx/confirm \
   -H "Content-Type: application/json" \
   -d '{"values":{"name":"XX 银行 POC","stage":"poc"}}'
+
+# 新建设备并关联拓扑节点（links 可省略）
+curl -X POST http://127.0.0.1:5000/api/devices \
+  -H "Content-Type: application/json" \
+  -d '{"project_id":"p_xxx","name":"核心交换机","category":"network","brand":"华为","model":"S12700E-8","quantity":2,"status":"selected","unit_price":168000,"links":[{"diagram_id":"d_xxx","node_key":"n3","quantity":2}]}'
+
+# 设备清单与汇总
+curl "http://127.0.0.1:5000/api/devices?project_id=p_xxx&category=network"
+curl "http://127.0.0.1:5000/api/projects/p_xxx/devices/summary"
+
+# 节点侧关联已有设备
+curl -X POST http://127.0.0.1:5000/api/diagrams/d_xxx/nodes/n3/devices \
+  -H "Content-Type: application/json" -d '{"device_id":"d_xxx"}'
+
+# 导出设备清单
+curl -o devices.csv "http://127.0.0.1:5000/api/projects/p_xxx/devices/export.csv"
+
+# 下载标准设备模板 CSV（仅表头，填写后导入）
+curl -o device-template.csv "http://127.0.0.1:5000/api/device-templates/sample.csv"
+
+# 预览模板 CSV（dry_run=1 不写入）
+curl -X POST http://127.0.0.1:5000/api/device-templates/import \
+  -F "file=@device-template.csv" -F "dry_run=1"
+
+# 导入模板（默认跳过重复；mode=overwrite 覆盖更新）
+curl -X POST http://127.0.0.1:5000/api/device-templates/import \
+  -F "file=@device-template.csv" -F "mode=skip"
+
+# 手动新增模板
+curl -X POST http://127.0.0.1:5000/api/device-templates \
+  -H "Content-Type: application/json" \
+  -d '{"category":"network","brand":"华为","model":"S12700E-8","spec":"48×10GE","unit":"台","unit_price":168000}'
 ```
 
 PowerShell 里用 `Invoke-RestMethod` 时注意 UTF-8；建议用 `-ContentType 'application/json; charset=utf-8'` 并传 UTF-8 字节。

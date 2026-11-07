@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>设备清单 · 星海银行 私有云 POC · TopoTash 拓事</title>
+<link rel="stylesheet" href="../../../static/css/topotash.css">
+<style>
+  /* ------------------------------------------------------------------
+     Prototype-only styles for the proposed device tab.
+     Kept separate so this file does not wire anything into the app.
+     ------------------------------------------------------------------ */
+  body { background: var(--bg); }
+  .dev-summary {
+    display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px;
+  }
+  .dev-stat {
+    min-width: 0; background: var(--surface); border: 1px solid var(--line);
+    border-radius: 12px; padding: 12px 14px; box-shadow: var(--shadow-sm);
+  }
+  .dev-stat > span { display: block; font-size: 11px; color: var(--muted); }
+  .dev-stat b {
+    display: block; margin-top: 3px; font-size: 21px; line-height: 1.2;
+    color: var(--ink); letter-spacing: -.01em;
+  }
+  .dev-stat b small { font-size: 12px; color: var(--muted); font-weight: 500; }
+  .dev-stat em { display: block; margin-top: 2px; font-style: normal; font-size: 10px; color: var(--muted); }
+  .dev-stat.money b { font-size: 18px; color: var(--primary); }
+
+  .dev-panel { padding: 0; overflow: hidden; }
+  .dev-toolbar {
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    padding: 11px 14px; border-bottom: 1px solid var(--line); background: #fff;
+  }
+  .dev-search { width: 252px; }
+  .dev-toolbar-right { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+  .dev-check {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11.5px; color: var(--muted); white-space: nowrap;
+  }
+  .dev-check input { width: 13px; height: 13px; accent-color: var(--primary); }
+
+  .dev-cat-row {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    padding: 8px 14px; background: var(--surface-2); border-bottom: 1px solid var(--line);
+  }
+  .dev-cat-filter {
+    height: 26px; padding: 0 10px; border: 1px solid var(--line); border-radius: 99px;
+    background: #fff; color: var(--ink-2); font-size: 11px;
+    display: inline-flex; align-items: center; gap: 5px;
+  }
+  .dev-cat-filter b { font-size: 9.5px; color: var(--muted); font-weight: 700; }
+  .dev-cat-filter.active { background: var(--primary); border-color: var(--primary); color: #fff; }
+  .dev-cat-filter.active b { color: rgba(255,255,255,.8); }
+  .dev-cat-filter:not(.active):hover { border-color: var(--line-strong); background: #fff; }
+  .dev-order { margin-left: auto; font-size: 10.5px; color: var(--muted); }
+
+  .dev-table { table-layout: fixed; }
+  .dev-table th { font-size: 10px; padding: 7px 8px; white-space: nowrap; }
+  .dev-table td { padding: 9px 8px; vertical-align: middle; }
+  .dev-table tbody tr { cursor: default; }
+  .dev-name { font-size: 12.5px; font-weight: 650; color: var(--ink); line-height: 1.35; }
+  .dev-model { margin-top: 2px; font-size: 10.5px; color: var(--muted); line-height: 1.35; }
+  .dev-cat {
+    display: inline-flex; align-items: center; justify-content: center;
+    height: 18px; padding: 0 7px; border-radius: 99px;
+    font-size: 10px; font-weight: 600; white-space: nowrap;
+  }
+  .dev-cat.network { background: var(--blue-soft); color: var(--blue); }
+  .dev-cat.security { background: var(--red-soft); color: var(--red); }
+  .dev-cat.server { background: var(--violet-soft); color: var(--violet); }
+  .dev-cat.storage { background: var(--teal-soft); color: var(--teal); }
+  .dev-cat.software { background: var(--amber-soft); color: var(--amber); }
+  .dev-cat.other { background: var(--surface-3); color: var(--ink-2); }
+  .dev-spec { font-size: 11px; color: var(--ink-2); line-height: 1.45; }
+  .dev-qty { font-size: 11.5px; color: var(--ink-2); white-space: nowrap; }
+  .dev-qty b { font-size: 12.5px; color: var(--ink); }
+  .dev-status {
+    display: inline-flex; align-items: center; justify-content: center;
+    height: 18px; padding: 0 7px; border-radius: 99px;
+    font-size: 10px; font-weight: 600; white-space: nowrap;
+  }
+  .dev-status.planned { background: var(--surface-3); color: var(--muted); }
+  .dev-status.selected { background: var(--blue-soft); color: var(--blue); }
+  .dev-status.quoted { background: var(--amber-soft); color: var(--amber); }
+  .dev-status.ordered { background: var(--violet-soft); color: var(--violet); }
+  .dev-status.delivered { background: var(--teal-soft); color: var(--teal); }
+  .dev-node {
+    display: inline-flex; align-items: flex-start; gap: 5px;
+    max-width: 100%; color: var(--primary); font-size: 10.5px; line-height: 1.4;
+  }
+  .dev-node svg { width: 12px; height: 12px; margin-top: 1px; flex: none; color: var(--primary); }
+  .dev-node span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dev-unlinked { font-size: 10.5px; color: #a2adbf; }
+  .dev-money { text-align: right; font-size: 11.5px; font-weight: 600; color: var(--ink); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .dev-money small { display: block; font-size: 9.5px; font-weight: 500; color: var(--muted); }
+  .dev-row-actions { text-align: right; }
+  .dev-row-actions button {
+    width: 25px; height: 25px; border: 1px solid var(--line); border-radius: 6px;
+    background: #fff; color: var(--muted); font-size: 15px; line-height: 1;
+  }
+  .dev-row-actions button:hover { border-color: var(--line-strong); color: var(--ink); }
+  .dev-foot {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    padding: 9px 14px; border-top: 1px solid var(--line); background: var(--surface-2);
+    color: var(--muted); font-size: 10.5px;
+  }
+  .dev-foot b { color: var(--ink-2); font-weight: 600; }
+
+  /* ------------------------------------------------------------------
+     Edit / create device modal (shown by ?modal=1)
+     ------------------------------------------------------------------ */
+  .modal-root.open { display: block; }
+  .dev-modal { margin-top: 5vh; max-height: 90vh; overflow-y: auto; padding-bottom: 18px; }
+  .dev-modal h3 { display: flex; align-items: center; gap: 8px; }
+  .dev-modal h3 .route-badge {
+    font-size: 9.5px; color: var(--primary); background: var(--primary-soft);
+    border: 1px solid #dfe3ff; border-radius: 99px; padding: 2px 7px; font-weight: 600;
+  }
+  .dev-modal .form-grid { gap: 10px 12px; }
+  .dev-modal .field label { display: flex; align-items: center; gap: 6px; }
+  .dev-modal .field textarea { height: 58px; }
+  .dev-count {
+    margin-left: auto; font-size: 9.5px; color: var(--primary); font-weight: 600;
+    background: var(--primary-soft); border-radius: 99px; padding: 1px 6px;
+  }
+  .node-links-box {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    padding: 9px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface-2);
+  }
+  .node-chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    height: 25px; padding: 0 6px 0 8px; border: 1px solid var(--line);
+    border-radius: 99px; background: #fff; font-size: 10.5px; color: var(--ink-2);
+  }
+  .node-chip b { font-weight: 600; color: var(--ink); }
+  .node-chip em { font-style: normal; color: var(--muted); }
+  .node-chip i {
+    display: grid; place-items: center; width: 15px; height: 15px;
+    border-radius: 50%; color: #a2adbf; font-style: normal; font-size: 12px; line-height: 1;
+  }
+  .node-chip i:hover { background: var(--red-soft); color: var(--red); }
+  .node-add {
+    height: 25px; padding: 0 9px; border: 1px dashed var(--line-strong);
+    border-radius: 99px; background: transparent; color: var(--primary); font-size: 10.5px;
+  }
+  .node-add:hover { background: var(--primary-soft); border-color: #b9c0f2; }
+  .dev-hint { display: block; margin-top: 5px; color: var(--muted); font-size: 10px; line-height: 1.45; }
+  .dev-modal .modal-actions { margin-top: 16px; }
+  .dev-modal .modal-actions .btn { height: 34px; padding: 0 14px; }
+  .dev-modal .modal-actions .btn-primary { min-width: 92px; }
+</style>
+</head>
+<body data-page="project">
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand" href="#">
+      <span class="brand-mark">
+        <svg viewBox="0 0 32 32" fill="none">
+          <circle cx="9" cy="9" r="4" stroke="currentColor" stroke-width="2"/>
+          <circle cx="23" cy="9" r="4" stroke="currentColor" stroke-width="2"/>
+          <circle cx="16" cy="23" r="4" stroke="currentColor" stroke-width="2"/>
+          <path d="M12.5 11.2 14.7 19M19.5 11.2 17.3 19M13 9h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <span class="brand-text"><b>TopoTash</b><em>拓事 · 售前工作台</em></span>
+    </a>
+
+    <nav class="nav">
+      <a href="#" class="nav-item" data-nav="dashboard">
+        <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>
+        <span>项目总览</span>
+      </a>
+      <a href="#" class="nav-item" data-nav="board">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 5h4v14H4zM10 5h4v9h-4zM16 5h4v11h-4z"/></svg>
+        <span>阶段看板</span>
+      </a>
+      <a href="#" class="nav-item" data-nav="diagrams">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.3 7.2 15.7 8.8M7.4 8.2l3.4 7.4M17 9.3l-3.7 6.4"/></svg>
+        <span>拓扑图库</span>
+      </a>
+    </nav>
+
+    <div class="side-projects">
+      <div class="side-head">
+        <span>项目</span>
+        <button class="icon-mini" title="新建项目">+</button>
+      </div>
+      <div class="project-nav">
+        <a class="project-link active" href="#">
+          <span class="pdot" style="background:#5b6cf0"></span>
+          <span class="pname">星海银行 私有云 POC</span>
+          <span class="pcount">6</span>
+        </a>
+        <a class="project-link" href="#">
+          <span class="pdot" style="background:#14b8a6"></span>
+          <span class="pname">恒达制造 智能工厂网络改造</span>
+          <span class="pcount">3</span>
+        </a>
+        <a class="project-link" href="#">
+          <span class="pdot" style="background:#ef4444"></span>
+          <span class="pname">市政云 政务云二期扩容</span>
+          <span class="pcount">6</span>
+        </a>
+        <a class="project-link" href="#">
+          <span class="pdot" style="background:#a855f7"></span>
+          <span class="pname">瑞康医药 数据中台选型</span>
+          <span class="pcount">4</span>
+        </a>
+      </div>
+    </div>
+
+    <div class="side-foot">
+      <span class="avatar">售</span>
+      <span class="side-foot-text"><b>售前工程师</b><em>本地 SQLite · 离线可用</em></span>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="crumb"><a href="#">项目总览</a><span class="crumb-sep">/</span><span>星海银行 私有云 POC</span></div>
+      <div class="top-search">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input placeholder="搜索项目 / 任务 / 拓扑图" autocomplete="off">
+        <kbd>/</kbd>
+      </div>
+      <button class="btn btn-ghost ai-trigger" type="button">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z"/><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2Z"/></svg>
+        <span>AI 助手</span>
+        <kbd>Ctrl K</kbd>
+      </button>
+      <button class="btn btn-primary">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14"/></svg>
+        新建项目
+      </button>
+    </header>
+
+    <main class="content project-content">
+      <section class="project-head">
+        <div class="project-head-main">
+          <div class="project-title-row">
+            <span class="project-dot" style="background:#5b6cf0"></span>
+            <h1>星海银行 私有云 POC</h1>
+            <span class="stage-pill poc">POC 验证</span>
+            <span class="status-pill active">跟进中</span>
+          </div>
+          <div class="project-meta">
+            <span>星海银行</span><i>·</i><span>张伟</span><i>·</i><span>更新于 3 分钟前</span>
+          </div>
+        </div>
+        <div class="project-head-actions">
+          <button class="btn btn-ghost">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+            编辑项目
+          </button>
+          <button class="icon-btn-lg">⋯</button>
+        </div>
+      </section>
+
+      <nav class="tabs">
+        <a href="#" class="tab">概览</a>
+        <a href="#" class="tab">任务 <span class="tab-count">7</span></a>
+        <a href="#" class="tab">拓扑图 <span class="tab-count">2</span></a>
+        <a href="#" class="tab">关联视图</a>
+        <a href="#" class="tab active">设备清单 <span class="tab-count">8</span></a>
+      </nav>
+
+      <section class="tab-panel">
+        <div class="dev-summary">
+          <div class="dev-stat"><span>设备种类</span><b>8</b><em>6 个类别</em></div>
+          <div class="dev-stat"><span>总数量</span><b>19</b><em>台 / 套 / 节点</em></div>
+          <div class="dev-stat"><span>已关联拓扑</span><b>6 <small>/ 8</small></b><em>5 个节点 · 1 张图</em></div>
+          <div class="dev-stat money"><span>预估金额</span><b>¥ 1,574,200</b><em>含税 · 未折扣</em></div>
+        </div>
+
+        <div class="panel dev-panel">
+          <div class="dev-toolbar">
+            <div class="task-search dev-search">
+              <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+              <input placeholder="搜索设备名称、型号、品牌…" autocomplete="off">
+            </div>
+            <select class="select select-sm">
+              <option>全部状态</option><option>规划中</option><option>已选型</option><option>已报价</option><option>已下单</option><option>已到货</option>
+            </select>
+            <label class="dev-check"><input type="checkbox"> 仅看未关联拓扑</label>
+            <div class="dev-toolbar-right">
+              <button class="btn btn-ghost btn-sm">导出 CSV</button>
+              <button class="btn btn-ghost btn-sm">从拓扑生成</button>
+              <button class="btn btn-primary btn-sm">
+                <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14"/></svg>
+                新增设备
+              </button>
+            </div>
+          </div>
+
+          <div class="dev-cat-row">
+            <button class="dev-cat-filter active">全部 <b>8</b></button>
+            <button class="dev-cat-filter">网络设备 <b>3</b></button>
+            <button class="dev-cat-filter">安全设备 <b>1</b></button>
+            <button class="dev-cat-filter">服务器 <b>1</b></button>
+            <button class="dev-cat-filter">存储 <b>1</b></button>
+            <button class="dev-cat-filter">软件许可 <b>1</b></button>
+            <button class="dev-cat-filter">其他 <b>1</b></button>
+            <span class="dev-order">按类别排序</span>
+          </div>
+
+          <div class="table-wrap">
+            <table class="data-table dev-table">
+              <colgroup>
+                <col style="width:23%"><col style="width:9%"><col style="width:22%"><col style="width:7%">
+                <col style="width:9%"><col style="width:18%"><col style="width:8%"><col style="width:4%">
+              </colgroup>
+              <thead>
+                <tr>
+                  <th>设备 / 型号</th><th>类别</th><th>关键参数</th><th>数量</th>
+                  <th>状态</th><th>关联拓扑</th><th style="text-align:right">小计</th><th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><div class="dev-name">核心交换机</div><div class="dev-model">华为 S12700E-8</div></td>
+                  <td><span class="dev-cat network">网络设备</span></td>
+                  <td class="dev-spec">48×10GE, 8×100GE, 双主控, 双电源</td>
+                  <td class="dev-qty"><b>2</b> 台</td>
+                  <td><span class="dev-status selected">已选型</span></td>
+                  <td><a class="dev-node" href="#"><svg viewBox="0 0 24 24" fill="none"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.3 7.2 15.7 8.8M7.4 8.2l3.4 7.4M17 9.3l-3.7 6.4"/></svg><span>POC 环境部署图 · 核心交换机 ×2</span></a></td>
+                  <td class="dev-money">¥336,000</td>
+                  <td class="dev-row-actions"><button>⋯</button></td>
+                </tr>
+                <tr>
+                  <td><div class="dev-name">边界防火墙</div><div class="dev-model">深信服 AF-2000-FH2250B</div></td>
+                  <td><span class="dev-cat security">安全设备</span></td>
+                  <td class="dev-spec">40Gbps, 双机热备, 含 3 年特征库</td>
+                  <td class="dev-qty"><b>2</b> 台</td>
+                  <td><span class="dev-status quoted">已报价</span></td>
+                  <td><a class="dev-node" href="#"><svg viewBox="0 0 24 24" fill="none"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.3 7.2 15.7 8.8M7.4 8.2l3.4 7.4M17 9.3l-3.7 6.4"/></svg><span>POC 环境部署图 · 边界防火墙 ×1</span></a></td>
+                  <td class="dev-money">¥196,000</td>
+                  <td class="dev-row-actions"><button>⋯</button></td>
+                </tr>
+                <tr>
+                  <td><div class="dev-name">计算节点</div><div class="dev-model">浪潮 NF5280M6</div></td>
+                  <td><span class="dev-cat server">服务器</span></td>
+                  <td class="dev-spec">2×6338, 512GB, 2×960GB SSD</td>
+                  <td class="dev-qty"><b>3</b> 台</td>
+                  <td><span class="dev-status ordered">已下单</span></td>
+                  <td><a class="dev-node" href="#"><svg viewBox="0 0 24 24" fill="none"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.3 7.2 15.7 8.8M7.4 8.2l3.4 7.4M17 9.3l-3.7 6.4"/></svg><span>POC 环境部署图 · 计算节点 ×3</span></a></td>
+                  <td class="dev-money">¥258,000</td>
+                  <td class="dev-row-actions"><button>⋯</button></td>
+                </tr>
+                <tr>
+                  <td><div class="dev-name">分布式存储</div><div class="dev-model">华为 OceanStor 5310</div></td>
+                  <td><span class="dev-cat storage">存储</span></td>
+                  <td class="dev-spec">3 节点, 96TB 可用, 双活</td>
+                  <td class="dev-qty"><b>3</b> 节点</td>
+                  <td><span class="dev-status selected">已选型</span></td>
+                  <td><a class="dev-node" href="#"><svg viewBox="0 0 24 24" fill="none"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.3 7.2 15.7 8.8M7.4 8.2l3.4 7.4M17 9.3l-3.7 6.4"/></svg><span>POC 环境部署图 · 分布式存储 ×1</span></a></td>
+                  <td class="dev-money">¥384,000</td>
+                  <td class="dev-row-actions"><button>⋯</button></td>
+                </tr>
+                <tr>
+                  <td><div class="dev-name">万兆接入交换机</div><div class="dev-model">华为 S5735-L24T4X</div></td>
+                  <td><span class="dev-cat network">网络设备</span></td>
+                  <td class="dev-spec">24×GE, 4×10GE, 堆叠</td>
+                  <td class="dev-qty"><b>4</b> 台</td>
+                  <td><span class="dev-status planned">规划中</span></td>
+                  <td><a class="dev-node" href="#"><svg viewBox="0 0 24 24" fill="none"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.3 7.2 15.7 8.8M7.4 8.2l3.4 7.4M17 9.3l-3.7 6.4"/></svg><span>POC 环境部署图 · 核心交换机 ×2</span></a></td>
+                  <td class="dev-money">¥19,200</td>
+                  <td class="dev-row-actions"><button>⋯</button></td>
+                </tr>
+                <tr>
+                  <td><div class="dev-name">负载均衡</div><div class="dev-model">F5 BIG-IP i2600</div></td>
+                  <td><span class="dev-cat network">网络设备</span></td>
+                  <td class="dev-spec">20Gbps, 双活, 含 1 年服务</td>
+                  <td class="dev-qty"><b>2</b> 台</td>
+                  <td><span class="dev-status planned">规划中</span></td>
+                  <td><span class="dev-unlinked">未关联</span></td>
+                  <td class="dev-money">¥290,000</td>
+                  <td class="dev-row-actions"><button>⋯</button></td>
+                </tr>
+                <tr>
+                  <td><div class="dev-name">备份软件</div><div class="dev-model">爱数 AnyBackup 8.0</div></td>
+                  <td><span class="dev-cat software">软件许可</span></td>
+                  <td class="dev-spec">50TB 备份容量, 3 年原厂</td>
+                  <td class="dev-qty"><b>1</b> 套</td>
+                  <td><span class="dev-status quoted">已报价</span></td>
+                  <td><span class="dev-unlinked">未关联</span></td>
+                  <td class="dev-money">¥76,000</td>
+                  <td class="dev-row-actions"><button>⋯</button></td>
+                </tr>
+                <tr>
+                  <td><div class="dev-name">运维终端</div><div class="dev-model">联想 ThinkCentre M90q</div></td>
+                  <td><span class="dev-cat other">其他</span></td>
+                  <td class="dev-spec">i7 / 32GB / 1TB SSD</td>
+                  <td class="dev-qty"><b>2</b> 台</td>
+                  <td><span class="dev-status delivered">已到货</span></td>
+                  <td><a class="dev-node" href="#"><svg viewBox="0 0 24 24" fill="none"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.3 7.2 15.7 8.8M7.4 8.2l3.4 7.4M17 9.3l-3.7 6.4"/></svg><span>POC 环境部署图 · 运维终端 ×1</span></a></td>
+                  <td class="dev-money">¥15,000</td>
+                  <td class="dev-row-actions"><button>⋯</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="dev-foot">
+            <span>共 <b>8</b> 种设备 · 数量合计 <b>19</b> · 已关联拓扑 <b>6</b> 种 / <b>5</b> 个节点</span>
+            <span>预估金额 <b>¥1,574,200</b> · 仅用于方案估算</span>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+</div>
+
+<div class="modal-root" id="modalRoot">
+  <div class="modal-mask"></div>
+  <div class="modal dev-modal" role="dialog" aria-modal="true" style="width:min(760px, calc(100vw - 32px))">
+    <h3>编辑设备 <span class="route-badge">设备清单</span></h3>
+    <div class="modal-sub">设备属于「星海银行 私有云 POC」。关联拓扑节点后，节点右下角会显示设备角标。</div>
+    <form onsubmit="return false">
+      <div class="form-grid">
+        <div class="field"><label>设备名称 *</label><input value="核心交换机"></div>
+        <div class="field"><label>类别 *</label><select><option>网络设备</option><option>安全设备</option><option>服务器</option><option>存储</option><option>软件许可</option><option>其他</option></select></div>
+        <div class="field"><label>品牌</label><input value="华为"></div>
+        <div class="field"><label>型号</label><input value="S12700E-8"></div>
+        <div class="field full"><label>关键参数 / 配置</label><textarea>48×10GE, 8×100GE, 双主控, 双电源；POC 环境两台堆叠</textarea></div>
+        <div class="field"><label>数量 *</label><input type="number" value="2"></div>
+        <div class="field"><label>单位</label><select><option>台</option><option>套</option><option>节点</option><option>个</option><option>块</option></select></div>
+        <div class="field"><label>状态</label><select><option>已选型</option><option>规划中</option><option>已报价</option><option>已下单</option><option>已到货</option></select></div>
+        <div class="field"><label>单价（元）</label><input value="168000"></div>
+        <div class="field"><label>供应商</label><input value="华为技术有限公司"></div>
+        <div class="field"><label>负责人</label><input value="张伟"></div>
+        <div class="field full"><label>备注</label><textarea>POC 主交换，双机堆叠；正式交付数量待方案确认。</textarea></div>
+        <div class="field full">
+          <label>关联拓扑节点 <span class="dev-count">1 个</span></label>
+          <div class="node-links-box">
+            <span class="node-chip"><b>POC 环境部署图</b><em>/ 核心交换机 ×2</em><i>×</i></span>
+            <button class="node-add" type="button">+ 选择节点</button>
+          </div>
+          <small class="dev-hint">一个设备可以关联同一张或多张拓扑图里的多个节点；节点删除后关联会自动清理。也可以在拓扑图属性面板里关联。</small>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" type="button">取消</button>
+        <button class="btn btn-primary" type="button">保存设备</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  if (new URLSearchParams(location.search).get('modal') === '1') {
+    document.getElementById('modalRoot').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+</script>
+</body>
+</html>

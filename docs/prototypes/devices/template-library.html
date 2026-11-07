@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>设备模板库 · TopoTash 拓事</title>
+<link rel="stylesheet" href="../../../static/css/topotash.css">
+<link rel="stylesheet" href="../../../static/css/devices.css">
+<style>
+  body { background: var(--bg); }
+  .tpl-page-head {
+    display: flex; align-items: flex-end; justify-content: space-between; gap: 18px;
+    margin: 4px 0 18px;
+  }
+  .tpl-page-head h1 { margin: 0 0 4px; font-size: 26px; letter-spacing: -.02em; }
+  .tpl-page-head p { margin: 0; color: var(--muted); font-size: 12.5px; }
+  .tpl-page-actions { display: flex; align-items: center; gap: 7px; flex: none; }
+  .tpl-summary { grid-template-columns: repeat(3, 1fr); }
+  .tpl-stat { display: flex; align-items: center; gap: 10px; }
+  .tpl-stat-icon {
+    width: 34px; height: 34px; border-radius: 9px; background: var(--primary-soft);
+    color: var(--primary); display: grid; place-items: center; flex: none;
+  }
+  .tpl-stat-icon svg { width: 18px; height: 18px; }
+  .tpl-stat b { margin-top: 0; font-size: 19px; }
+  .tpl-stat em { margin-top: 0; }
+  .tpl-table { min-width: 1040px; }
+  .tpl-table td { padding: 10px 8px; }
+  .tpl-table .dev-name { font-size: 12.5px; }
+  .tpl-table .dev-model { font-size: 10.5px; }
+  .tpl-row-actions { display: flex; align-items: center; justify-content: flex-end; gap: 7px; }
+  .tpl-row-actions button {
+    height: 24px; padding: 0 7px; border: 1px solid var(--line); border-radius: 6px;
+    background: #fff; color: var(--ink-2); font-size: 10px;
+  }
+  .tpl-row-actions button:hover { border-color: var(--line-strong); }
+  .tpl-row-actions button.danger:hover { border-color: #efb6b6; background: var(--red-soft); color: var(--red); }
+  .tpl-brand { font-size: 11.5px; color: var(--ink-2); }
+  .tpl-unit { font-size: 11px; color: var(--muted); }
+  .tpl-date { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+  .tpl-empty { padding: 32px; text-align: center; color: var(--muted); font-size: 12px; }
+
+  /* import modal */
+  .tpl-import-modal { margin-top: 5vh; max-height: 90vh; overflow-y: auto; width: min(760px, calc(100vw - 32px)); }
+  .tpl-import-modal h3 { display: flex; align-items: center; gap: 8px; }
+  .tpl-import-modal h3 .route-badge {
+    font-size: 9.5px; color: var(--primary); background: var(--primary-soft);
+    border: 1px solid #dfe3ff; border-radius: 99px; padding: 2px 7px; font-weight: 600;
+  }
+  .tpl-drop {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 5px; min-height: 96px; padding: 12px; text-align: center;
+    border: 1px dashed #b9c0f2; border-radius: 10px; background: #f8faff; cursor: pointer;
+  }
+  .tpl-drop:hover { background: var(--primary-soft); }
+  .tpl-drop-icon {
+    width: 32px; height: 32px; border-radius: 9px; background: #fff;
+    border: 1px solid var(--line); display: grid; place-items: center; color: var(--primary);
+  }
+  .tpl-drop b { font-size: 12px; color: var(--ink-2); }
+  .tpl-drop span { font-size: 10px; color: var(--muted); }
+  .tpl-file {
+    display: flex; align-items: center; gap: 7px; padding: 7px 9px;
+    border: 1px solid var(--line); border-radius: 8px; background: #fff; margin-top: 8px;
+  }
+  .tpl-file b { font-size: 11px; color: var(--ink-2); }
+  .tpl-file span { font-size: 10px; color: var(--muted); }
+  .tpl-file a { margin-left: auto; font-size: 10px; color: var(--primary); font-weight: 600; }
+  .tpl-preview-head {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    margin: 13px 0 6px;
+  }
+  .tpl-preview-head b { font-size: 11.5px; color: var(--ink); }
+  .tpl-preview-head span { font-size: 10px; color: var(--muted); }
+  .tpl-preview { border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+  .tpl-preview table { width: 100%; border-collapse: collapse; font-size: 10.5px; }
+  .tpl-preview th { background: var(--surface-2); color: var(--muted); text-align: left; font-size: 9.5px; padding: 6px 7px; }
+  .tpl-preview td { padding: 6px 7px; border-top: 1px solid var(--line); color: var(--ink-2); }
+  .tpl-preview tr.dup td { background: #fffaf0; }
+  .tpl-ok { color: var(--teal); font-weight: 600; }
+  .tpl-dup { color: var(--amber); font-weight: 600; }
+  .tpl-import-options {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    margin-top: 12px; padding: 9px 10px; background: var(--surface-2);
+    border: 1px solid var(--line); border-radius: 8px;
+  }
+  .tpl-import-options > span { font-size: 10.5px; color: var(--muted); }
+  .tpl-import-options label { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; color: var(--ink-2); }
+  .tpl-import-options input { accent-color: var(--primary); }
+  .tpl-import-hint { margin-top: 9px; font-size: 10px; color: var(--muted); line-height: 1.5; }
+  .tpl-import-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+  .tpl-import-actions .btn { height: 34px; padding: 0 14px; }
+
+  /* template edit modal */
+  .tpl-edit-modal { margin-top: 8vh; max-height: 86vh; overflow-y: auto; width: min(620px, calc(100vw - 32px)); }
+  .tpl-edit-modal h3 { display: flex; align-items: center; gap: 8px; }
+  .tpl-edit-modal h3 .route-badge {
+    font-size: 9.5px; color: var(--primary); background: var(--primary-soft);
+    border: 1px solid #dfe3ff; border-radius: 99px; padding: 2px 7px; font-weight: 600;
+  }
+  .tpl-edit-modal .form-grid { gap: 10px 12px; }
+  .tpl-edit-modal .field textarea { height: 62px; }
+  .tpl-edit-modal .modal-actions { margin-top: 16px; }
+</style>
+</head>
+<body data-page="templates">
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand" href="#">
+      <span class="brand-mark">
+        <svg viewBox="0 0 32 32" fill="none">
+          <circle cx="9" cy="9" r="4" stroke="currentColor" stroke-width="2"/>
+          <circle cx="23" cy="9" r="4" stroke="currentColor" stroke-width="2"/>
+          <circle cx="16" cy="23" r="4" stroke="currentColor" stroke-width="2"/>
+          <path d="M12.5 11.2 14.7 19M19.5 11.2 17.3 19M13 9h6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+        </svg>
+      </span>
+      <span class="brand-text"><b>TopoTash</b><em>拓事 · 售前工作台</em></span>
+    </a>
+
+    <nav class="nav">
+      <a href="#" class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>
+        <span>项目总览</span>
+      </a>
+      <a href="#" class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 5h4v14H4zM10 5h4v9h-4zM16 5h4v11h-4z"/></svg>
+        <span>阶段看板</span>
+      </a>
+      <a href="#" class="nav-item">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.3 7.2 15.7 8.8M7.4 8.2l3.4 7.4M17 9.3l-3.7 6.4"/></svg>
+        <span>拓扑图库</span>
+      </a>
+      <a href="#" class="nav-item active">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M4 7.5 12 4l8 3.5v9L12 20l-8-3.5v-9Z"/><path d="m4 7.5 8 3.5 8-3.5M12 11v9"/></svg>
+        <span>设备模板</span>
+      </a>
+    </nav>
+
+    <div class="side-projects">
+      <div class="side-head">
+        <span>项目</span>
+        <button class="icon-mini" title="新建项目">+</button>
+      </div>
+      <div class="project-nav">
+        <a class="project-link" href="#">
+          <span class="pdot" style="background:#5b6cf0"></span>
+          <span class="pname">星海银行 私有云 POC</span>
+          <span class="pcount">6</span>
+        </a>
+        <a class="project-link" href="#">
+          <span class="pdot" style="background:#14b8a6"></span>
+          <span class="pname">恒达制造 智能工厂网络改造</span>
+          <span class="pcount">3</span>
+        </a>
+        <a class="project-link" href="#">
+          <span class="pdot" style="background:#ef4444"></span>
+          <span class="pname">市政云 政务云二期扩容</span>
+          <span class="pcount">6</span>
+        </a>
+        <a class="project-link" href="#">
+          <span class="pdot" style="background:#a855f7"></span>
+          <span class="pname">瑞康医药 数据中台选型</span>
+          <span class="pcount">4</span>
+        </a>
+      </div>
+    </div>
+
+    <div class="side-foot">
+      <span class="avatar">售</span>
+      <span class="side-foot-text"><b>售前工程师</b><em>本地 SQLite · 离线可用</em></span>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <div class="crumb"><span>设备模板</span></div>
+      <div class="top-search">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input placeholder="搜索模板 / 品牌 / 型号" autocomplete="off">
+        <kbd>/</kbd>
+      </div>
+      <button class="btn btn-ghost ai-trigger" type="button">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z"/><path d="M18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8.8-2.2Z"/></svg>
+        <span>AI 助手</span>
+        <kbd>Ctrl K</kbd>
+      </button>
+      <button class="btn btn-primary">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14"/></svg>
+        新建项目
+      </button>
+    </header>
+
+    <main class="content">
+      <div class="tpl-page-head">
+        <div>
+          <div class="eyebrow">GLOBAL DEVICE LIBRARY</div>
+          <h1>设备模板库</h1>
+          <p>全局共享的设备预设。创建项目设备时先选模板，再按项目需求修改；不会修改模板本身。</p>
+        </div>
+        <div class="tpl-page-actions">
+          <button class="btn btn-ghost btn-sm">下载 CSV 模板</button>
+          <button class="btn btn-ghost btn-sm">导入 CSV</button>
+          <button class="btn btn-primary btn-sm">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14"/></svg>
+            新增模板
+          </button>
+        </div>
+      </div>
+
+      <div class="dev-summary tpl-summary">
+        <div class="dev-stat tpl-stat">
+          <span class="tpl-stat-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7.5 12 4l8 3.5v9L12 20l-8-3.5v-9Z"/><path d="m4 7.5 8 3.5 8-3.5M12 11v9"/></svg></span>
+          <div><span>模板数量</span><b>8</b><em>可复用的设备预设</em></div>
+        </div>
+        <div class="dev-stat tpl-stat">
+          <span class="tpl-stat-icon"><svg viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></svg></span>
+          <div><span>覆盖类别</span><b>6</b><em>服务器 / 网络 / 安全…</em></div>
+        </div>
+        <div class="dev-stat tpl-stat">
+          <span class="tpl-stat-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M4 20V6a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v14"/><path d="M8 8h8M8 12h5M8 16h8"/></svg></span>
+          <div><span>覆盖品牌</span><b>6</b><em>华为 / 深信服 / 浪潮…</em></div>
+        </div>
+      </div>
+
+      <div class="panel dev-panel">
+        <div class="dev-toolbar">
+          <div class="task-search dev-search">
+            <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input placeholder="搜索模板名称、品牌、型号…" autocomplete="off">
+          </div>
+          <select class="select select-sm">
+            <option>全部品牌</option><option>华为</option><option>深信服</option><option>浪潮</option><option>F5</option><option>爱数</option><option>联想</option>
+          </select>
+        </div>
+
+        <div class="dev-cat-row">
+          <button class="dev-cat-filter active">全部 <b>8</b></button>
+          <button class="dev-cat-filter">服务器 <b>1</b></button>
+          <button class="dev-cat-filter">存储 <b>1</b></button>
+          <button class="dev-cat-filter">网络 <b>3</b></button>
+          <button class="dev-cat-filter">安全 <b>1</b></button>
+          <button class="dev-cat-filter">软件 <b>1</b></button>
+          <button class="dev-cat-filter">其他 <b>1</b></button>
+          <span class="dev-order">按更新时间排序</span>
+        </div>
+
+        <div class="table-wrap">
+          <table class="data-table dev-table tpl-table">
+            <colgroup>
+              <col style="width:23%"><col style="width:9%"><col style="width:11%"><col style="width:25%">
+              <col style="width:8%"><col style="width:10%"><col style="width:10%"><col style="width:10%">
+            </colgroup>
+            <thead>
+              <tr><th>设备 / 型号</th><th>类别</th><th>品牌</th><th>关键参数</th><th>默认单位</th><th style="text-align:right">参考单价</th><th>更新时间</th><th></th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><div class="dev-name">核心交换机</div><div class="dev-model">S12700E-8</div></td>
+                <td><span class="dev-cat network">网络</span></td>
+                <td class="tpl-brand">华为</td>
+                <td class="dev-spec">48×10GE, 8×100GE, 双主控</td>
+                <td class="tpl-unit">台</td>
+                <td class="dev-money">¥168,000</td>
+                <td class="tpl-date">2 小时前</td>
+                <td><div class="tpl-row-actions"><button>编辑</button><button class="danger">删除</button></div></td>
+              </tr>
+              <tr>
+                <td><div class="dev-name">万兆接入交换机</div><div class="dev-model">S5735-L24T4X</div></td>
+                <td><span class="dev-cat network">网络</span></td>
+                <td class="tpl-brand">华为</td>
+                <td class="dev-spec">24×GE, 4×10GE, 堆叠</td>
+                <td class="tpl-unit">台</td>
+                <td class="dev-money">¥4,800</td>
+                <td class="tpl-date">昨天</td>
+                <td><div class="tpl-row-actions"><button>编辑</button><button class="danger">删除</button></div></td>
+              </tr>
+              <tr>
+                <td><div class="dev-name">边界防火墙</div><div class="dev-model">AF-2000-FH2250B</div></td>
+                <td><span class="dev-cat security">安全</span></td>
+                <td class="tpl-brand">深信服</td>
+                <td class="dev-spec">40Gbps, 双机热备, 3 年特征库</td>
+                <td class="tpl-unit">台</td>
+                <td class="dev-money">¥98,000</td>
+                <td class="tpl-date">昨天</td>
+                <td><div class="tpl-row-actions"><button>编辑</button><button class="danger">删除</button></div></td>
+              </tr>
+              <tr>
+                <td><div class="dev-name">计算节点</div><div class="dev-model">NF5280M6</div></td>
+                <td><span class="dev-cat server">服务器</span></td>
+                <td class="tpl-brand">浪潮</td>
+                <td class="dev-spec">2×6338, 512GB, 2×960GB SSD</td>
+                <td class="tpl-unit">台</td>
+                <td class="dev-money">¥86,000</td>
+                <td class="tpl-date">2 天前</td>
+                <td><div class="tpl-row-actions"><button>编辑</button><button class="danger">删除</button></div></td>
+              </tr>
+              <tr>
+                <td><div class="dev-name">分布式存储</div><div class="dev-model">OceanStor 5310</div></td>
+                <td><span class="dev-cat storage">存储</span></td>
+                <td class="tpl-brand">华为</td>
+                <td class="dev-spec">3 节点, 96TB 可用, 双活</td>
+                <td class="tpl-unit">节点</td>
+                <td class="dev-money">¥128,000</td>
+                <td class="tpl-date">2 天前</td>
+                <td><div class="tpl-row-actions"><button>编辑</button><button class="danger">删除</button></div></td>
+              </tr>
+              <tr>
+                <td><div class="dev-name">负载均衡</div><div class="dev-model">BIG-IP i2600</div></td>
+                <td><span class="dev-cat network">网络</span></td>
+                <td class="tpl-brand">F5</td>
+                <td class="dev-spec">20Gbps, 双活, 含 1 年服务</td>
+                <td class="tpl-unit">台</td>
+                <td class="dev-money">¥145,000</td>
+                <td class="tpl-date">3 天前</td>
+                <td><div class="tpl-row-actions"><button>编辑</button><button class="danger">删除</button></div></td>
+              </tr>
+              <tr>
+                <td><div class="dev-name">备份软件</div><div class="dev-model">AnyBackup 8.0</div></td>
+                <td><span class="dev-cat software">软件</span></td>
+                <td class="tpl-brand">爱数</td>
+                <td class="dev-spec">50TB 备份容量, 3 年原厂</td>
+                <td class="tpl-unit">套</td>
+                <td class="dev-money">¥76,000</td>
+                <td class="tpl-date">3 天前</td>
+                <td><div class="tpl-row-actions"><button>编辑</button><button class="danger">删除</button></div></td>
+              </tr>
+              <tr>
+                <td><div class="dev-name">运维终端</div><div class="dev-model">ThinkCentre M90q</div></td>
+                <td><span class="dev-cat other">其他</span></td>
+                <td class="tpl-brand">联想</td>
+                <td class="dev-spec">i7 / 32GB / 1TB SSD</td>
+                <td class="tpl-unit">台</td>
+                <td class="dev-money">¥7,500</td>
+                <td class="tpl-date">1 周前</td>
+                <td><div class="tpl-row-actions"><button>编辑</button><button class="danger">删除</button></div></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="dev-foot">
+          <span>共 <b>8</b> 个模板 · 6 个类别 · 6 个品牌</span>
+          <span>模板全局共享，不绑定项目</span>
+        </div>
+      </div>
+    </main>
+  </div>
+</div>
+
+<div class="modal-root open" id="modalRoot">
+  <div class="modal-mask"></div>
+  <div class="modal tpl-import-modal" role="dialog" aria-modal="true">
+    <h3>导入设备模板 <span class="route-badge">CSV</span></h3>
+    <div class="modal-sub">使用 UTF-8 / UTF-8 BOM 编码；第一行必须是表头。导入后可继续在模板库编辑。</div>
+    <div class="tpl-drop">
+      <span class="tpl-drop-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M12 16V4"/><path d="m7 9 5-5 5 5"/><path d="M5 20h14"/></svg></span>
+      <b>拖入 CSV 或点击选择文件</b>
+      <span>支持 .csv，最大 2 MB</span>
+    </div>
+    <div class="tpl-file">
+      <svg viewBox="0 0 24 24" fill="none" style="width:15px;height:15px;color:#7c879a"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/><path d="M14 3v6h6"/></svg>
+      <b>device-templates.csv</b><span>8 行 · 3.2 KB</span><a href="#">重新选择</a>
+    </div>
+    <div class="tpl-preview-head"><b>导入预览</b><span>已识别 8 行 · 7 行可导入 · 1 行重复</span></div>
+    <div class="tpl-preview">
+      <table>
+        <thead><tr><th>设备名称</th><th>类别</th><th>品牌</th><th>型号</th><th>参考单价</th><th>结果</th></tr></thead>
+        <tbody>
+          <tr><td>核心交换机</td><td>网络</td><td>华为</td><td>S12700E-8</td><td>¥168,000</td><td class="tpl-dup">重复</td></tr>
+          <tr><td>万兆接入交换机</td><td>网络</td><td>华为</td><td>S5735-L24T4X</td><td>¥4,800</td><td class="tpl-ok">新增</td></tr>
+          <tr><td>边界防火墙</td><td>安全</td><td>深信服</td><td>AF-2000-FH2250B</td><td>¥98,000</td><td class="tpl-ok">新增</td></tr>
+          <tr><td colspan="5" style="color:var(--muted);text-align:center">还有 5 行…</td><td class="tpl-ok">新增</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="tpl-import-options">
+      <span>重复项处理</span>
+      <label><input type="radio" name="dup" checked> 跳过重复（推荐）</label>
+      <label><input type="radio" name="dup"> 覆盖更新已有模板</label>
+    </div>
+    <div class="tpl-import-hint">重复判定：设备名称 + 品牌 + 型号相同。CSV 列支持：设备名称、类别、品牌、型号、关键参数、单位、参考单价、备注；类别可写中文或英文 key。</div>
+    <div class="tpl-import-actions">
+      <button class="btn btn-ghost" type="button">取消</button>
+      <button class="btn btn-primary" type="button">导入 7 条</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-root" id="editModal">
+  <div class="modal-mask"></div>
+  <div class="modal tpl-edit-modal" role="dialog" aria-modal="true">
+    <h3>新增模板 <span class="route-badge">全局</span></h3>
+    <div class="modal-sub">模板全局共享；项目设备只是复制字段，不会反向修改模板。</div>
+    <form onsubmit="return false">
+      <div class="form-grid">
+        <div class="field"><label>设备名称 *</label><input value="核心交换机" maxlength="160"></div>
+        <div class="field"><label>类别 *</label><select><option selected>网络</option><option>安全</option><option>服务器</option><option>存储</option><option>软件</option><option>其他</option></select></div>
+        <div class="field"><label>品牌</label><input value="华为" maxlength="80"></div>
+        <div class="field"><label>型号</label><input value="S12700E-8" maxlength="120"></div>
+        <div class="field full"><label>关键参数 / 配置</label><textarea>48×10GE, 8×100GE, 双主控, 双电源</textarea></div>
+        <div class="field"><label>默认单位</label><select><option selected>台</option><option>套</option><option>节点</option><option>个</option><option>块</option></select></div>
+        <div class="field"><label>参考单价（元）</label><input type="number" value="168000"></div>
+        <div class="field full"><label>备注</label><textarea>标准模板备注，例如适用场景、选型说明。</textarea></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" type="button">取消</button>
+        <button class="btn btn-primary" type="button">保存模板</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  if (params.get('import') === '1') {
+    document.getElementById('modalRoot').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  } else {
+    document.getElementById('modalRoot').classList.remove('open');
+  }
+  if (params.get('edit') === '1') {
+    document.getElementById('editModal').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+</script>
+</body>
+</html>

@@ -52,6 +52,9 @@ def create_app(test_config: dict | None = None) -> Flask:
     def validate_api_body():
         if not request.path.startswith("/api/") or request.method not in {"POST", "PUT", "PATCH"}:
             return
+        # CSV import uses multipart/form-data; the endpoint validates the file.
+        if request.mimetype == "multipart/form-data":
+            return
         data = request.get_json(silent=True)
         if request.get_data() and not isinstance(data, dict):
             raise ApiError("请求内容必须是 JSON 对象", 400, "invalid_json")
@@ -78,6 +81,10 @@ def create_app(test_config: dict | None = None) -> Flask:
     @app.get("/diagrams")
     def diagrams_library():
         return render_template("diagrams.html")
+
+    @app.get("/device-templates")
+    def device_templates_page():
+        return render_template("device_templates.html")
 
     @app.get("/projects/<project_id>")
     def project_page(project_id):

@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}设备模板 · TopoTash 拓事{% endblock %}
+{% block page %}templates{% endblock %}
+{% block crumb %}<span>设备模板</span>{% endblock %}
+
+{% block content %}
+<div class="tpl-page-head">
+  <div>
+    <div class="eyebrow">GLOBAL DEVICE LIBRARY</div>
+    <h1>设备模板库</h1>
+    <p>全局共享的设备预设。创建项目设备时先选模板，再按项目需求修改；不会修改模板本身。</p>
+  </div>
+  <div class="tpl-page-actions">
+    <a class="btn btn-ghost btn-sm" id="btnTemplateSample" href="/api/device-templates/sample.csv">下载 CSV 模板</a>
+    <button class="btn btn-ghost btn-sm" id="btnImportTemplates" type="button">导入 CSV</button>
+    <button class="btn btn-primary btn-sm" id="btnNewTemplate" type="button">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14"/></svg>
+      新增模板
+    </button>
+  </div>
+</div>
+
+<div class="dev-summary tpl-summary" id="templateSummary"></div>
+
+<div class="panel dev-panel">
+  <div class="dev-toolbar">
+    <div class="task-search dev-search">
+      <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="templateSearch" placeholder="搜索模板名称、品牌、型号…" autocomplete="off">
+    </div>
+    <select class="select select-sm" id="templateBrandFilter" aria-label="按品牌筛选">
+      <option value="all">全部品牌</option>
+    </select>
+  </div>
+
+  <div class="dev-cat-row" id="templateCatRow"></div>
+
+  <div class="table-wrap">
+    <table class="data-table dev-table tpl-table">
+      <colgroup>
+        <col style="width:23%"><col style="width:9%"><col style="width:11%"><col style="width:25%">
+        <col style="width:8%"><col style="width:10%"><col style="width:10%"><col style="width:10%">
+      </colgroup>
+      <thead>
+        <tr>
+          <th>型号</th><th>类别</th><th>品牌</th><th>关键参数</th>
+          <th>默认单位</th><th style="text-align:right">参考单价</th><th>更新时间</th><th></th>
+        </tr>
+      </thead>
+      <tbody id="templateTableBody"></tbody>
+    </table>
+  </div>
+  <div class="dev-foot" id="templateFoot"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/device-templates.js') }}"></script>
+{% endblock %}

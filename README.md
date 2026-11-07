@@ -1,13 +1,15 @@
 # TopoTash 拓事
 
-> 面向 IT 售前工程师的项目工作台：**项目 → 任务 → 拓扑图** 放在同一条线上。
+> 面向 IT 售前工程师的项目工作台：**项目 → 任务 → 拓扑图 → 设备清单** 放在同一条线上。
 
-TopoTash 是一个自带后端的完整 Web 应用。每个项目下有多个任务和多张拓扑图；任务可以关联图纸，拓扑图节点可以标记「待跟进」并直接创建或跳转到任务；所有视图都可以按售前阶段聚合。
+TopoTash 是一个自带后端的完整 Web 应用。每个项目下有多个任务、多张拓扑图和一份方案设备清单；任务可以关联图纸，拓扑图节点可以标记「待跟进」并直接创建或跳转到任务，也可以关联设备。全局设备模板库可以预置常用设备，创建项目设备时一键带入；所有视图都可以按售前阶段聚合。
 
 - 项目总览、阶段看板、拓扑图库（新建 / 导入 / 复制 / 绑定项目；支持暂不绑定项目的库内图纸）、项目工作台
 - 原生任务台：按售前阶段分组的列表、状态看板、优先级、子任务、标签、搜索、任务↔图纸↔节点关联
+- 项目设备清单：方案级 BOM、类别/状态/数量/价格、CSV 导出，设备↔拓扑节点双向关联
+- 全局设备模板库：手动录入或 CSV 导入常用设备，设备弹窗/拓扑节点可直接套用模板后再按项目修改
 - 全局 AI 助手：一处配置 OpenAI 兼容 API，向导式新建项目、管理任务；所有写入先生成草稿，确认后执行
-- 拓扑编辑器：系统架构图、逻辑拓扑、POC 部署图，节点级任务联动；支持 JSON / PNG / SVG / reveal.js 片段导出，画布自动保存到 TopoTash
+- 拓扑编辑器：系统架构图、逻辑拓扑、POC 部署图，节点级任务/设备联动；节点角标优先显示设备型号；支持 JSON / PNG / SVG / reveal.js 片段导出，画布自动保存到 TopoTash
 - SQLite 持久化，数据全部落在项目根目录，离线可用
 
 ![项目总览](docs/screenshots/01-dashboard.png)
@@ -33,6 +35,14 @@ TopoTash 是一个自带后端的完整 Web 应用。每个项目下有多个任
 | 拓扑图类型缩略图（逻辑拓扑 / 系统架构 / 部署图 / 其他） |
 |---|
 | ![类型缩略图](docs/screenshots/08-diagram-thumbnails.png) |
+
+| 项目设备清单 | 设备模板库 |
+|---|---|
+| ![设备清单](docs/screenshots/13-project-devices-v2.png) | ![设备模板库](docs/screenshots/12-template-library.png) |
+
+| 新增设备（可选模板） | 拓扑节点设备联动 |
+|---|---|
+| ![新增设备](docs/screenshots/16-actual-device-modal-blank.png) | ![拓扑节点设备联动](docs/screenshots/15-topology-device-panel.png) |
 
 ## 快速开始
 
@@ -105,6 +115,8 @@ python -m unittest discover -s tests -t . -v
 - 总览 / 阶段看板 / 关联视图 / 全局搜索、页面路由、静态资源与 JSON 错误格式
 - 示例数据、历史任务/画布 JSON 迁移、`init-db` / `seed-demo` CLI
 - AI 配置校验、密钥掩码、工具循环、草稿确认/取消/并发保护（模型调用用替身，不联网）
+- 设备清单 CRUD、类别/状态/关键词/未关联筛选、汇总与金额、设备↔节点关联、节点删除/项目删除清理、CSV 导出
+- 全局设备模板 CRUD/筛选、重复校验、CSV 样例下载、预览导入、跳过/覆盖重复项、模板页路由
 - 草稿字段冲突与数据保留、模型等待期间的并行写入、主任务删除后的状态接续、参数校验与批量查询
 - 拓扑绘图共用全局配置、流式转发、上游错误、连接关闭与旧配置迁移
 
@@ -117,8 +129,9 @@ python -m unittest discover -s tests -t . -v
 | 项目总览 | `/` | 项目卡片、阶段筛选、统计、即将到期、节点待跟进 |
 | 阶段看板 | `/board` | 四个售前阶段泳道，任务卡片可点击直达任务台 |
 | 拓扑图库 | `/diagrams` | 全部项目的拓扑图，显示节点数 / 关联任务 / 待跟进数 |
-| 项目工作台 | `/projects/<id>` | 概览 / 任务 / 拓扑图 / 关联视图 四个标签页 |
-| 拓扑编辑器 | `/projects/<id>/diagrams/<did>` | 全屏画布，自动保存到 SQLite |
+| 设备模板 | `/device-templates` | 全局设备模板库：手动录入、CSV 导入、按类别/品牌筛选 |
+| 项目工作台 | `/projects/<id>` | 概览 / 任务 / 拓扑图 / 关联视图 / 设备清单 五个标签页 |
+| 拓扑编辑器 | `/projects/<id>/diagrams/<did>` | 全屏画布，自动保存到 SQLite；节点可关联任务与设备 |
 
 任意页面都可以点击顶部「AI 助手」或按 `Ctrl+K` 打开全局抽屉：对话、项目/任务草稿、确认执行都在这里，不再跳转旧版任务台。
 
@@ -128,6 +141,8 @@ TopoTash 由一个 Flask 应用统一托管：
 
 - **Shell**：Jinja 页面骨架 + 原生 JS，负责项目导航、总览、阶段看板与项目工作台。
 - **原生任务台**：`static/js/tasks.js` + REST API，按项目/阶段直接读写 `tasks` 表，不再嵌套旧 TodoFlow 页面。
+- **设备清单**：`static/js/devices.js` + `services_devices.py`。设备属于项目，`device_node_links` 维护设备与拓扑节点的多对多关联；清单页负责 CRUD/汇总/CSV，拓扑属性面板负责关联与新建。
+- **设备模板库**：`templates/device_templates.html` + `static/js/device-templates.js` + `device_templates` 表。模板全局共享，CSV 预览/导入由服务端解析；设备创建时只复制字段，不存模板外键。
 - **全局 AI 助手**：`static/js/ai.js` + `api/ai.py` + `services_ai.py`。浏览器只和本机 Flask 通信，模型 Key 不进入浏览器；读工具直接查库，写工具只生成 `ai_actions` 草稿，用户确认后才通过服务层落库。
 - **拓扑编辑器**：自包含的 SVG 编辑器，通过桥接脚本保存画布 JSON，并在属性面板与节点上提供任务联动。
 - **桥接层**：拓扑编辑器通过同源 `fetch` 调用 REST API，`postMessage` 向父页面传递保存状态与打开任务事件。
@@ -147,12 +162,14 @@ TopoTash/
 ├── schema.sql                  # 全部建表语句（含索引、外键、CHECK）
 ├── services.py                 # 领域服务：项目/任务/节点同步、经典任务台状态
 ├── services_ai.py              # AI：全局配置、模型客户端、工具定义、Agent 循环、草稿动作
+├── services_devices.py         # 设备清单 / 全局设备模板 / 节点关联 / CSV
 ├── topotash.db                 # 运行时数据库（init-db 生成）
 ├── api/
 │   ├── __init__.py
 │   ├── projects.py             # 项目 + 经典任务台全量状态同步
 │   ├── tasks.py                # 任务、子任务、标签、任务↔拓扑图
 │   ├── diagrams.py             # 图纸内容、节点索引、节点跟进/关联
+│   ├── devices.py              # 设备 CRUD、节点关联、CSV、全局设备模板
 │   ├── views.py                # 总览、阶段看板、关联视图、全局搜索
 │   └── ai.py                   # AI 配置、会话、对话、草稿确认
 ├── templates/                  # Jinja 页面骨架
@@ -160,6 +177,7 @@ TopoTash/
 │   ├── dashboard.html
 │   ├── board.html
 │   ├── diagrams.html
+│   ├── device_templates.html
 │   ├── project.html
 │   └── editor.html
 ├── static/
@@ -167,7 +185,9 @@ TopoTash/
 │   ├── topotash.ico            # 快捷方式图标（首次启动向导生成）
 │   ├── css/topotash.css
 │   ├── css/ai.css              # 全局 AI 抽屉与草稿卡片
-│   ├── js/                     # shell / dashboard / board / project / tasks / editor / ai / diagram-thumbs / diagram-actions
+│   ├── css/devices.css         # 项目设备清单 / 设备弹窗模板选择
+│   ├── css/device-templates.css # 全局设备模板库
+│   ├── js/                     # shell / dashboard / board / project / tasks / devices / device-templates / editor / ai / diagram-thumbs / diagram-actions
 │   └── apps/
 │       ├── topology/           # 内置拓扑编辑器 + 桥接
 │       └── tasks/              # 旧版任务台兼容页（不再有入口，仅供旧数据回看）
@@ -183,6 +203,8 @@ TopoTash/
 │   ├── test_ai.py              # AI 草稿/确认/配置/会话（假模型，不联网）
 │   ├── test_ai_config.py       # AI 配置校验、工具循环、草稿生命周期
 │   ├── test_ai_topology.py     # 拓扑绘图全局配置、流式代理与密钥隔离
+│   ├── test_devices.py         # 设备 CRUD、筛选汇总、节点关联、CSV、级联清理
+│   ├── test_device_templates.py # 模板 CRUD、重复校验、CSV 预览/导入、页面路由
 │   └── test_regressions.py     # 草稿冲突、数据保留、并发、查询与启动回归
 ├── tools/
 │   ├── seed_demo.py            # 示例数据
@@ -248,6 +270,25 @@ GET    /api/diagrams/<id>/content             画布 JSON（含节点跟进信�
 PUT    /api/diagrams/<id>/content             保存画布 JSON（同步节点索引）
 POST   /api/diagrams/<id>/nodes/<key>/followup 标记节点 / 创建或关联任务
 DELETE /api/diagrams/<id>/nodes/<key>/links/<task_id> 取消节点任务关联
+POST   /api/diagrams/<id>/nodes/<key>/devices  节点关联设备 / 从节点创建设备
+DELETE /api/diagrams/<id>/nodes/<key>/devices/<device_id> 取消节点设备关联
+
+GET    /api/devices?project_id=&category=&status=&q=&linked= 设备清单
+POST   /api/devices                           新建设备（可带 links）
+PATCH  /api/devices/<id>                      更新设备（links 全量替换）
+DELETE /api/devices/<id>                      删除设备
+POST   /api/devices/<id>/nodes                设备关联节点
+DELETE /api/devices/<id>/nodes/<did>/<node_key> 取消关联
+GET    /api/projects/<id>/devices/summary     设备汇总
+GET    /api/projects/<id>/devices/export.csv  导出设备清单
+
+GET    /api/device-templates?category=&brand=&q= 全局设备模板
+POST   /api/device-templates                  新增模板
+GET    /api/device-templates/<id>             模板详情
+PATCH  /api/device-templates/<id>             更新模板
+DELETE /api/device-templates/<id>             删除模板
+GET    /api/device-templates/sample.csv       下载标准导入 CSV（仅表头）
+POST   /api/device-templates/import           CSV 预览 / 导入（multipart；dry_run=1 预览）
 
 GET    /api/views/overview                    总览聚合
 GET    /api/views/stage-board                 阶段看板
@@ -275,6 +316,10 @@ POST   /api/ai/actions/<id>/cancel            取消草稿
 - 节点角标状态：`diagram_nodes.followup_status` 与主任务状态联动；任务完成时自动把角标改成「已完成」。
 - 自动保存：拓扑编辑器修改、撤销和重做后 900ms 防抖 PUT；保存期间的新改动会继续保存，完成前保留未保存标记。原生任务台按操作立即 PATCH/POST，项目统计通过事件刷新。
 - 任务台不再嵌套 TodoFlow：列表按售前阶段分组，看板按状态分列，任务详情直接管理子任务、标签、关联图纸和拓扑节点。
+- 设备清单是项目级 BOM：设备与拓扑节点通过 `device_node_links` 多对多关联；节点左上角优先显示设备型号（无型号显示设备名称），最多显示 2 个型号 + `+N`；节点删除只解除关联，设备删除级联清理关联。
+- 设备模板是全局预设：`device_templates` 不绑定项目，设备保存时只复制模板字段，因此改模板不会影响历史项目；模板不要求设备名称，按「品牌+型号」识别，字段不包含项目数量、供应商、负责人。
+- 设备模板 CSV 由服务端生成表头并解析：支持 UTF-8/BOM/GBK、中文类别；导入先预览，重复键为「品牌+型号」，默认跳过、可切换覆盖。
+- 设备金额只用于方案估算：`quantity × unit_price`，单价为空时不参与合计；CSV 导出带 UTF-8 BOM，方便 Excel 打开。
 - 全局 AI 两阶段写入：读工具直接查询；`create/update/delete` 工具只生成 `ai_actions` 草稿，用户在抽屉里改字段并点确认后才调用 `services.py` 落库，失败不会留下半成品。
 - 修改草稿只写入实际改动的字段；同一字段在草稿生成后被修改时会提示冲突，需要重新生成草稿。升级前生成、缺少字段快照的修改草稿也需要重新生成。
 - AI 配置只存一份：`app_settings.ai_config`，首次打开会自动迁移最近一个项目的旧 `aiConfig`；模型请求由 Flask 转发，Key 不回传浏览器。
@@ -287,6 +332,11 @@ POST   /api/ai/actions/<id>/cancel            取消草稿
 - 拓扑图缩略图暂用占位图，未生成真实 PNG 预览。
 - 全局助手等待完整回复，其拓扑工具为只读；编辑器内的 AI 绘图支持流式生成与确认应用。任务与项目支持草稿确认后读写。
 - AI 模型需支持 OpenAI 兼容的 `tools` / function calling，否则无法生成项目/任务草稿。
+- 设备清单首版支持手动新增、编辑、筛选、CSV 导出与拓扑节点关联；设备清单 CSV/Excel 导入、从拓扑批量生成、设备↔任务、AI 管理设备暂未实现。
+- 设备模板库支持手动录入与 CSV 导入；暂不提供模板导出、模板默认数量/供应商、批量删除；模板 CSV 下载为仅表头的标准格式。
+- 拓扑节点设备角标按型号显示，最多 2 个型号 + `+N`；完整列表在属性面板，过长型号会截断并保留悬浮提示。
+- 设备关联的节点数量默认等于设备数量；暂未提供逐节点数量编辑界面（数据模型已保留 `device_node_links.quantity`）。
+- 全局搜索暂不检索设备名称/型号/设备模板；设备清单与模板库页内搜索可用。
 - API Key 以明文保存在本地 SQLite；本应用默认只监听 `127.0.0.1`，请勿直接暴露到公网。
 - 删除项目会级联删除任务、拓扑图与关联，界面有二次确认；AI 删除项目同样需要确认草稿。
 - `static/apps/tasks/` 旧版任务台不再有入口，仅保留用于回看历史数据；其 AI 面板已不再使用。

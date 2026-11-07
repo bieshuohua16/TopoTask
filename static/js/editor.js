@@ -66,6 +66,8 @@
       setStatus('ok', '已导出 ' + (msg.filename || 'JSON'));
     } else if (msg.type === 'topotash:open-task' && msg.taskId && window.TT_EDITOR.project) {
       location.href = `/projects/${window.TT_EDITOR.project.id}?tab=tasks&task=${encodeURIComponent(msg.taskId)}`;
+    } else if (msg.type === 'topotash:open-device' && msg.deviceId && window.TT_EDITOR.project) {
+      location.href = `/projects/${window.TT_EDITOR.project.id}?tab=devices&device=${encodeURIComponent(msg.deviceId)}`;
     } else if (msg.type === 'topotash:toast') {
       TT.toast && TT.toast(msg.message, msg.level || 'success');
     }

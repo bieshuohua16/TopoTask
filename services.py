@@ -107,25 +107,30 @@ def projects_stats(project_ids: Iterable[str]) -> dict[str, dict]:
              MIN(CASE WHEN status!='done' AND due_date!='' THEN due_date END) AS next_due
            FROM tasks WHERE project_id IN ({placeholders}) GROUP BY project_id""", ids,
     )}
-    diagrams = {r["project_id"]: r["n"] for r in db.execute(
-        f"SELECT project_id, COUNT(*) AS n FROM diagrams WHERE project_id IN ({placeholders}) GROUP BY project_id",
+    extras = {r["project_id"]: r for r in db.execute(
+        f"""SELECT p.id AS project_id,
+               (SELECT COUNT(*) FROM diagrams d WHERE d.project_id=p.id) AS diagram_count,
+               (SELECT COUNT(*) FROM diagram_nodes dn
+                  JOIN diagrams d ON d.id=dn.diagram_id
+                  WHERE d.project_id=p.id AND dn.followup_status IN ('todo','doing')) AS followup_count,
+               (SELECT COUNT(*) FROM devices dv WHERE dv.project_id=p.id) AS device_count,
+               (SELECT COALESCE(SUM(dv.quantity), 0) FROM devices dv WHERE dv.project_id=p.id) AS device_quantity
+            FROM projects p WHERE p.id IN ({placeholders})""",
         ids,
-    )}
-    followups = {r["project_id"]: r["n"] for r in db.execute(
-        f"""SELECT d.project_id, COUNT(*) AS n FROM diagram_nodes dn
-           JOIN diagrams d ON d.id = dn.diagram_id
-           WHERE d.project_id IN ({placeholders}) AND dn.followup_status IN ('todo','doing')
-           GROUP BY d.project_id""", ids,
     )}
     out = {}
     for pid in ids:
         count = dict(counts[pid]) if pid in counts else {}
         total, done = count.get("total", 0), count.get("done", 0)
+        extra = dict(extras[pid]) if pid in extras else {}
         out[pid] = {
             "task_total": total, "task_done": done,
             "task_doing": count.get("doing", 0), "task_open": count.get("open", 0),
             "task_progress": round(done / total * 100) if total else 0,
-            "diagram_count": diagrams.get(pid, 0), "followup_count": followups.get(pid, 0),
+            "diagram_count": extra.get("diagram_count", 0),
+            "followup_count": extra.get("followup_count", 0),
+            "device_count": extra.get("device_count", 0),
+            "device_quantity": extra.get("device_quantity", 0),
             "next_due": count.get("next_due"),
         }
     return out
@@ -629,6 +634,9 @@ def sync_diagram_nodes(diagram_id: str, content: dict) -> int:
             "DELETE FROM node_task_links WHERE diagram_id=? AND node_key=?", (diagram_id, key)
         )
         db.execute(
+            "DELETE FROM device_node_links WHERE diagram_id=? AND node_key=?", (diagram_id, key)
+        )
+        db.execute(
             "DELETE FROM diagram_nodes WHERE diagram_id=? AND node_key=?", (diagram_id, key)
         )
     return len(nodes)
@@ -637,6 +645,7 @@ def sync_diagram_nodes(diagram_id: str, content: dict) -> int:
 def node_dict(row) -> dict:
     d = dict(row)
     d["linked_tasks"] = []
+    d["linked_devices"] = []
     d["primary_task"] = None
     return d
 
@@ -655,10 +664,15 @@ def nodes_with_links(diagram_id: str) -> list[dict]:
     by_node: dict[str, list[dict]] = {}
     for link in links:
         by_node.setdefault(link["node_key"], []).append(dict(link))
+    # Lazy import avoids a services <-> services_devices import cycle.
+    from services_devices import device_links_for_diagram
+
+    devices_by_node = device_links_for_diagram(diagram_id)
     out = []
     for row in nodes:
         d = node_dict(row)
         d["linked_tasks"] = by_node.get(row["node_key"], [])
+        d["linked_devices"] = devices_by_node.get(row["node_key"], [])
         primary = next((t for t in d["linked_tasks"] if t["is_primary"]), None)
         d["primary_task"] = primary
         out.append(d)
@@ -695,6 +709,21 @@ def merge_followup_into_content(diagram_id: str, content: dict) -> dict:
                     "primary": bool(t["is_primary"]),
                 }
                 for t in node["linked_tasks"]
+            ],
+            "devices": [
+                {
+                    "id": d["device_id"],
+                    "name": d["name"],
+                    "brand": d["brand"],
+                    "model": d["model"],
+                    "category": d["category"],
+                    "category_label": d["category_label"],
+                    "status": d["status"],
+                    "status_label": d["status_label"],
+                    "quantity": d["quantity"],
+                    "unit": d["unit"],
+                }
+                for d in node.get("linked_devices") or []
             ],
         }
     return content

@@ -282,6 +282,18 @@ projects 1 ─── N task_categories
 - `ai_actions`：AI 生成的待确认动作。`payload` 保存可编辑字段、摘要与警告，`status` 为 `pending / applied / cancelled`，`result` 保存执行结果（项目/任务 id、名称）。
 - 写操作只在用户确认后执行；`apply_action` 与服务层共用同一套校验和事务，AI 无法绕过页面规则。
 
+### 3.12 devices
+
+项目级方案 BOM。字段：名称、类别（server/storage/network/security/software/other）、品牌、型号、关键参数、数量、单位、状态（planned/selected/quoted/ordered/delivered）、单价/币种、供应商、负责人、备注、排序、时间戳。金额按 `quantity × unit_price` 估算，单价为空不参与合计。
+
+### 3.13 device_node_links
+
+设备 ↔ 拓扑节点多对多：`device_id`、`diagram_id`、`node_key`、`quantity`（本节点数量）、`note`、`created_at`，唯一约束 `(device_id, diagram_id, node_key)`。设备/图纸删除级联清理；`sync_diagram_nodes` 删除节点时同步清理。
+
+### 3.14 device_templates
+
+全局设备模板，不绑定项目。字段：类别、品牌、型号、关键参数、默认单位、参考单价、备注、时间戳；模板不要求设备名称，按「品牌+型号」识别（内部保留一个自动生成的隐藏显示名，用于选择器兜底）。模板是预设，项目设备只复制字段，不存模板外键，因此修改模板不会影响历史项目。
+
 ---
 
 ## 4. API 设计
@@ -345,6 +357,38 @@ PATCH /api/diagrams/<did> {project_id}    # 绑定 / 移动到另一个项目
 
 编辑器顶部提供「导出 JSON」，导出当前画布（去除运行时 `tt` 元数据）为 `.vweb.json`，可直接用于拓扑图库或项目页的「导入拓扑图」。
 
+### 4.4 设备清单与节点关联
+
+```
+GET  /api/devices?project_id=&category=&status=&q=&linked=
+POST /api/devices                              # 可带 links 全量关联
+PATCH /api/devices/<id>                        # links 若提供则全量替换
+POST /api/diagrams/<id>/nodes/<key>/devices    # {device_id} 或 {create_device}
+DELETE /api/diagrams/<id>/nodes/<key>/devices/<device_id>
+GET  /api/projects/<id>/devices/export.csv
+```
+
+约束：
+
+- 设备与拓扑图必须同项目；节点必须已在 `diagram_nodes` 中保存。
+- 节点数量未传时默认取设备数量；重复关联走 `ON CONFLICT ... DO UPDATE`。
+- 节点删除只解除关联，不删除设备；图纸迁移到其他项目时清空该图的设备关联。
+- 节点响应增加 `linked_devices`；画布内容合并时写入 `tt.devices`，桥接脚本据此渲染角标与属性面板。
+- 角标优先显示 `model`，无型号显示 `name`；每节点最多渲染 2 个型号 + `+N`，完整列表在属性面板。
+
+### 4.5 设备模板
+
+```
+GET    /api/device-templates?category=&brand=&q=
+POST   /api/device-templates
+PATCH  /api/device-templates/<id>
+DELETE /api/device-templates/<id>
+GET    /api/device-templates/sample.csv        # 仅表头，UTF-8 BOM
+POST   /api/device-templates/import            # multipart + dry_run/mode
+```
+
+CSV 由服务端解析，支持 UTF-8/BOM/GBK、中文类别；预览返回 `new/duplicate/invalid`；重复键 `(brand, model)`，默认跳过、可覆盖更新。模板删除不影响项目设备。
+
 ---
 
 ## 5. 前端架构
@@ -357,7 +401,7 @@ PATCH /api/diagrams/<did> {project_id}    # 绑定 / 移动到另一个项目
 │  Logo         ├──────────────────────────────────────────────┤
 │  项目总览      │ 页面内容（Jinja 骨架 + JS 渲染）              │
 │  阶段看板      │                                              │
-│  拓扑图库      │ 项目工作台：概览 / 任务 / 拓扑图 / 关联视图     │
+│  拓扑图库      │ 项目工作台：概览 / 任务 / 拓扑图 / 关联视图 / 设备清单 │
 │  项目列表      │   └─ 任务标签页 = 原生任务台（列表/看板 + 详情抽屉）
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -385,9 +429,10 @@ PATCH /api/diagrams/<did> {project_id}    # 绑定 / 移动到另一个项目
 - 覆盖 `scheduleAutosave()`：修改、撤销与重做均触发 900ms 防抖 `PUT /content`；通过改动序号识别保存期间的新修改，并继续保存；
 - 覆盖 `saveDoc()`：不再下载文件，改为立即保存到服务端；
 - 文件菜单提供「导出 JSON / 导出 PNG / 导出 SVG / 导出交互片段」，移除独立的新建、打开、保存、加载示例；`Ctrl+N/O/S` 被拦截并提示画布已自动保存；
-- 包装 `render()`：给带 `tt.status` 的节点加 SVG 角标；
-- 包装 `syncProps()`：在属性面板顶部插入「TopoTash 跟进」区块；
-- 角标点击：有主任务 → `postMessage` 给父页面跳转任务台；无任务 → 选中节点，显示创建/关联控件；
+- 包装 `render()`：给带 `tt.status` 的节点加 SVG 跟进角标；给带 `tt.devices` 的节点加左上角设备角标，优先显示型号，最多 2 个 + `+N`；
+- 包装 `syncProps()`：在属性面板顶部插入「TopoTash 设备」区块（位于「TopoTash 跟进」之上）；
+- 角标点击：跟进角标有主任务 → `postMessage` 给父页面跳转任务台；设备角标 → 选中节点并聚焦设备区块；
+- 设备区块：加载项目设备，支持关联已有、取消关联、从节点新建并关联；新建区提供紧凑模板下拉；「打开」通过 `postMessage({type:'topotash:open-device'})` 让父页面跳转设备清单；
 - 禁用本地草稿自动保存，避免不同图纸互相覆盖。
 - 未保存或保存中离开页面时触发浏览器确认；节点任务选择器也分页读取全部任务。
 
@@ -462,6 +507,30 @@ PATCH /api/diagrams/<did> {project_id}    # 绑定 / 移动到另一个项目
 - 删除当前打开的项目时，提示后回到项目总览。
 - 会话、消息、草稿全部持久化；刷新页面后打开抽屉会恢复最近一次对话。
 
+### 5.6 项目设备清单与拓扑联动
+
+实现位置：`templates/project.html` 的 `#panel-devices` + `static/js/devices.js`，以及 `topotash-topology-bridge.js` 的设备区块。
+
+- 项目工作台第 5 个标签页，调用 `TTDevices.show(projectId, {device})`；`GET /api/devices` 返回设备、全量汇总、类别计数；`?tab=devices&device=<id>` 会定位并高亮该行。
+- 表格按类别排序，支持搜索/类别/状态/「仅看未关联」筛选；新增与编辑共用一个弹窗，`links` 与设备字段一起提交，服务端原子替换关联。新增弹窗顶部有「从设备模板开始」选择器，可搜索、带入字段或空白新建；设备名称/品牌/型号等字段不再放示例占位文案。
+- 拓扑节点属性面板新增「TopoTash 设备」区块：关联已有、取消关联、从节点新建；新建区有紧凑模板下拉，可带入名称/类别/型号/参数/单位/参考价，数量按节点。
+- 节点左上角按设备型号画角标（无型号显示设备名称），最多 2 个型号 + `+N`，右上角保留任务跟进角标；点击设备角标选中节点并聚焦设备区块。
+- 双向导航：设备清单节点 chip → `/projects/<pid>/diagrams/<did>?node=<key>`；拓扑「打开」→ `/projects/<pid>?tab=devices&device=<id>`。
+- 生命周期：节点删除只清关联；图纸删除级联清关联；设备删除级联清关联；图纸迁移到其他项目时清空该图设备关联；复制图纸不复制设备关联。
+- CSV 导出由服务端生成（UTF-8 BOM），金额只用于方案估算。
+- 设备清单沿用项目级数据边界；未来多用户权限按项目成员控制，设备编辑与任务同级。
+
+### 5.7 全局设备模板库
+
+实现位置：`templates/device_templates.html` + `static/js/device-templates.js` + `static/css/device-templates.css`。
+
+- 左侧导航「设备模板」→ `/device-templates`，不绑定项目；页面提供搜索、类别/品牌筛选、模板 CRUD。
+- 模板字段：类别、品牌、型号、关键参数、默认单位、参考单价、备注；不要求设备名称，新建默认类别为服务器；不保存项目数量、状态、供应商、负责人。
+- CSV：页面顶部与导入弹窗都可下载系统标准 CSV（仅表头，不含设备名称列）；导入先预览，显示新增/重复/错误，重复键 `(brand, model)`，默认跳过、可覆盖更新。
+- 设备弹窗「从设备模板开始」：搜索/选择模板后带入字段，数量默认 1、关联节点为空；编辑已有设备不显示该选择器，避免误覆盖。
+- 拓扑属性面板的「新建并关联设备」提供紧凑模板下拉；选中后带入技术字段，节点数量仍独立填写。
+- 模板删除不影响已创建的项目设备；项目设备不存模板外键，后续改模板不会回写历史项目。
+
 ---
 
 ## 6. 项目结构
@@ -475,16 +544,22 @@ PATCH /api/diagrams/<did> {project_id}    # 绑定 / 移动到另一个项目
 | `schema.sql` | 单一 schema 来源，`init-db` 直接 `executescript` |
 | `services.py` | 序列化 / 节点解析 / 任务同步 / 经典任务台状态 |
 | `services_ai.py` | AI 配置、模型客户端、工具定义、Agent 循环、草稿动作 |
+| `services_devices.py` | 设备清单：CRUD、汇总、节点关联、CSV；全局设备模板 CRUD/CSV |
 | `api/projects.py` | 项目 CRUD + 经典任务台全量状态双向同步 |
 | `api/tasks.py` | 任务 / 子任务 / 标签 / 任务-图纸关联 |
 | `api/diagrams.py` | 图纸 CRUD / 画布内容 / 节点索引 / 节点跟进 |
+| `api/devices.py` | 设备 CRUD / 节点关联 / CSV；设备模板接口 |
 | `api/views.py` | 总览、阶段看板、关联视图、搜索等只读聚合 |
 | `api/ai.py` | AI 配置 / 会话 / 对话 / 草稿确认接口 |
 | `static/js/tasks.js` | 原生任务台：列表、看板、筛选、详情抽屉、子任务/标签/关联 |
-| `static/js/project.js` | 项目工作台四个标签页与任务台生命周期 |
+| `static/js/devices.js` | 设备清单：表格、筛选、编辑弹窗、模板选择、节点选择、CSV |
+| `static/js/device-templates.js` | 全局模板库：表格、CRUD、CSV 预览/导入 |
+| `static/js/project.js` | 项目工作台五个标签页与任务台/设备清单生命周期 |
 | `static/js/ai.js` | 全局 AI 抽屉：对话、Markdown、草稿卡片、设置、历史 |
 | `static/js/editor.js` | 拓扑编辑器外壳与 postMessage 状态 |
-| `tests/` | unittest 测试套件：REST API、服务层、示例数据/迁移、AI 草稿与工具循环（见 README「测试」） |
+| `templates/device_templates.html` | 全局设备模板库页面 |
+| `static/css/device-templates.css` | 模板库与模板弹窗样式 |
+| `tests/` | unittest 测试套件：REST API、服务层、示例数据/迁移、AI 草稿与工具循环、设备清单与模板（见 README「测试」） |
 
 ---
 
@@ -549,6 +624,16 @@ python tools/migrate_json.py --todo data/todos.json --visio data/diagrams --visi
 5. 认证与多用户（当前明确是本地单用户工具）。
 6. AI 二期：SSE 流式输出、结构化提问表单、周报/汇报稿生成、粘贴文本批量建项目、低风险动作免确认。
 7. 全局助手的拓扑图创建/修改、节点跟进建议（其拓扑工具当前只读；编辑器已有独立绘图交互）。
+8. 设备清单二期：CSV/Excel 导入、从拓扑节点批量生成设备、设备↔采购/到货任务、逐节点数量编辑、全局搜索与 AI 管理设备。
+9. 设备模板二期：模板导出、默认数量/供应商、批量删除、模板分组/版本、按品牌/型号去重规则配置。
+
+**设备清单为什么单独建表，而不是塞进拓扑节点？**
+
+拓扑节点是画布上的可视元素，一个节点可能代表一组设备，也可能没有图纸；设备清单是方案级 BOM，需要独立维护数量、品牌、型号、状态、价格和供应商。用 `device_node_links` 做弱关联，既能从设备查看「用在哪张图的哪个节点」，也能从节点查看「这里有哪些设备」，同时删除节点不会误删设备。
+
+**设备清单为什么先做手动维护 + 拓扑关联？**
+
+售前阶段经常先有 Excel/BOM，再有拓扑图，两个方向的初始化都可能发生。首版先把「清单能维护、节点能关联、能导出」跑通；批量导入和从拓扑生成涉及字段映射与去重规则，放到二期更稳。
 
 **AI 为什么采用服务端代理，而不是浏览器直连？**
 

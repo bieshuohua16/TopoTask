@@ -40,6 +40,7 @@
   <a href="?tab=tasks" data-tab="tasks" class="tab">任务 <span class="tab-count" id="tabTaskCount"></span></a>
   <a href="?tab=diagrams" data-tab="diagrams" class="tab">拓扑图 <span class="tab-count" id="tabDiagramCount"></span></a>
   <a href="?tab=links" data-tab="links" class="tab">关联视图</a>
+  <a href="?tab=devices" data-tab="devices" class="tab">设备清单 <span class="tab-count" id="tabDeviceCount"></span></a>
 </nav>
 
 <section class="tab-panel" id="panel-overview">
@@ -170,6 +171,51 @@
     </div>
   </div>
 </section>
+
+<section class="tab-panel hidden" id="panel-devices">
+  <div class="dev-summary" id="deviceSummary"></div>
+  <div class="panel dev-panel">
+    <div class="dev-toolbar">
+      <div class="task-search dev-search">
+        <svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input id="deviceSearch" placeholder="搜索设备名称、型号、品牌…" autocomplete="off">
+      </div>
+      <select class="select select-sm" id="deviceStatusFilter" aria-label="按设备状态筛选">
+        <option value="all">全部状态</option>
+        <option value="planned">规划中</option>
+        <option value="selected">已选型</option>
+        <option value="quoted">已报价</option>
+        <option value="ordered">已下单</option>
+        <option value="delivered">已到货</option>
+      </select>
+      <label class="dev-check"><input type="checkbox" id="deviceUnlinkedFilter"> 仅看未关联拓扑</label>
+      <div class="dev-toolbar-right">
+        <a class="btn btn-ghost btn-sm" id="btnExportDevices" href="#">导出 CSV</a>
+        <button class="btn btn-primary btn-sm" id="btnNewDevice" type="button">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12h14"/></svg>
+          新增设备
+        </button>
+      </div>
+    </div>
+    <div class="dev-cat-row" id="deviceCatRow"></div>
+    <div class="table-wrap">
+      <table class="data-table dev-table">
+        <colgroup>
+          <col style="width:23%"><col style="width:9%"><col style="width:22%"><col style="width:7%">
+          <col style="width:9%"><col style="width:18%"><col style="width:8%"><col style="width:4%">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>设备 / 型号</th><th>类别</th><th>关键参数</th><th>数量</th>
+            <th>状态</th><th>关联拓扑</th><th style="text-align:right">小计</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="deviceTableBody"></tbody>
+      </table>
+    </div>
+    <div class="dev-foot" id="deviceFoot"></div>
+  </div>
+</section>
 {% endblock %}
 
 {% block scripts %}
@@ -177,6 +223,7 @@
 window.TT_PROJECT = {{ project|tojson }};
 </script>
 <script src="{{ url_for('static', filename='js/tasks.js') }}"></script>
+<script src="{{ url_for('static', filename='js/devices.js') }}"></script>
 <script src="{{ url_for('static', filename='js/diagram-thumbs.js') }}"></script>
 <script src="{{ url_for('static', filename='js/diagram-actions.js') }}"></script>
 <script src="{{ url_for('static', filename='js/project.js') }}"></script>

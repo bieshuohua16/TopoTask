@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>拓扑节点设备联动 · 原型</title>
+<link rel="stylesheet" href="../../../static/css/topotash.css">
+<link rel="stylesheet" href="../../../static/apps/topology/topotash-topology.css">
+<style>
+  /* Static prototype: the real editor screenshot is the canvas background.
+     The right property panel and node device badges are overlays. */
+  html, body { margin: 0; height: 100%; }
+  body.editor-proto { background: #e9edf5; overflow: hidden; font-family: var(--font); }
+  .screen { position: relative; width: 1440px; height: 960px; overflow: hidden; }
+  .shot { position: absolute; inset: 0; width: 1440px; height: 960px; display: block; }
+
+  .selection {
+    position: absolute; left: 706px; top: 339px; width: 142px; height: 148px;
+    border: 2px dashed #4f5bd5; border-radius: 16px;
+    box-shadow: 0 0 0 4px rgba(79, 91, 213, .12);
+    pointer-events: none;
+  }
+
+  .dev-badge {
+    position: absolute; display: inline-flex; align-items: center; gap: 4px;
+    height: 20px; padding: 0 7px; border-radius: 8px;
+    background: #162033; color: #fff; font-size: 9.5px; font-weight: 600;
+    border: 1.5px solid #fff; box-shadow: 0 3px 9px rgba(16, 24, 40, .3);
+    white-space: nowrap;
+  }
+  .dev-badge svg { width: 11px; height: 11px; color: #7dd3fc; }
+
+  /* Right property panel overlay, covering the empty panel in the screenshot */
+  .prop-panel {
+    position: absolute; left: 1120px; top: 96px; width: 320px; height: 864px;
+    background: #fff; border-left: 1px solid var(--line);
+    display: flex; flex-direction: column; box-shadow: -12px 0 30px rgba(16, 24, 40, .06);
+  }
+  .prop-top {
+    flex: none; height: 48px; padding: 0 16px; display: flex; align-items: center;
+    justify-content: space-between; border-bottom: 1px solid var(--line);
+    font-size: 13px; font-weight: 600; color: var(--ink);
+  }
+  .prop-top span { color: #a2adbf; font-size: 18px; font-weight: 400; }
+  .prop-tabs {
+    flex: none; height: 38px; padding: 0 14px; display: flex; align-items: stretch;
+    gap: 4px; border-bottom: 1px solid var(--line);
+  }
+  .prop-tabs button {
+    border: 0; background: transparent; padding: 0 10px; color: var(--muted);
+    font-size: 11.5px; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .prop-tabs button.active { color: var(--primary); font-weight: 600; border-bottom-color: var(--primary); }
+  .prop-body { flex: 1; min-height: 0; overflow-y: auto; padding: 0 14px 18px; }
+
+  .p-node { display: flex; align-items: center; gap: 9px; padding: 12px 0 11px; border-bottom: 1px solid var(--line); }
+  .p-node-icon {
+    width: 32px; height: 32px; border-radius: 9px; background: var(--primary-soft);
+    display: grid; place-items: center; color: var(--primary); flex: none;
+  }
+  .p-node-icon svg { width: 18px; height: 18px; }
+  .p-node-name { font-size: 12.5px; font-weight: 600; color: var(--ink); line-height: 1.3; }
+  .p-node-type { font-size: 10px; color: var(--muted); margin-top: 1px; }
+
+  .p-sec { padding: 11px 0; border-bottom: 1px solid var(--line); }
+  .p-sec:last-child { border-bottom: 0; }
+  .p-sec-head { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+  .p-sec-head b { font-size: 11.5px; font-weight: 650; color: var(--ink); }
+  .p-sec-head .p-sec-count {
+    margin-left: auto; font-size: 9.5px; font-weight: 700; color: var(--primary);
+    background: var(--primary-soft); border-radius: 99px; padding: 1px 6px;
+  }
+  .p-row { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; }
+  .p-row:last-child { margin-bottom: 0; }
+  .p-row label { width: 34px; flex: none; font-size: 10px; color: var(--muted); }
+  .p-row input {
+    flex: 1; min-width: 0; height: 28px; border: 1px solid var(--line); border-radius: 6px;
+    padding: 0 7px; font-size: 10.5px; color: var(--ink-2); background: #fff; outline: none;
+  }
+  .p-row.two input { width: 0; }
+  .p-row input:focus { border-color: #b9c0f2; box-shadow: 0 0 0 3px rgba(79,91,213,.1); }
+
+  .p-dev {
+    margin: 12px 0; padding: 10px; border: 1px solid #dfe4ff; border-radius: 10px;
+    background: #f8faff;
+  }
+  .p-dev .p-sec-head { margin-bottom: 3px; }
+  .p-dev-note { font-size: 9.5px; color: #8a93a6; line-height: 1.4; margin-bottom: 8px; }
+  .p-device {
+    background: #fff; border: 1px solid var(--line); border-radius: 8px;
+    padding: 7px 8px; margin-bottom: 7px;
+  }
+  .p-device-top { display: flex; align-items: center; gap: 6px; }
+  .p-device-top b { font-size: 11px; font-weight: 600; color: var(--ink); }
+  .p-device-top .p-pill { margin-left: auto; }
+  .p-device-sub { font-size: 10px; color: var(--muted); margin-top: 2px; line-height: 1.4; }
+  .p-device-acts { display: flex; align-items: center; gap: 10px; margin-top: 5px; }
+  .p-device-acts a { font-size: 10px; color: var(--primary); font-weight: 600; }
+  .p-device-acts a.muted { color: #a2adbf; font-weight: 500; }
+  .p-pill {
+    display: inline-flex; align-items: center; justify-content: center;
+    height: 17px; padding: 0 6px; border-radius: 99px;
+    font-size: 9px; font-weight: 600; white-space: nowrap;
+  }
+  .p-pill.selected { background: var(--blue-soft); color: var(--blue); }
+  .p-pill.planned { background: var(--surface-3); color: var(--muted); }
+  .p-select {
+    width: 100%; height: 28px; border: 1px solid var(--line); border-radius: 6px;
+    padding: 0 7px; font-size: 10.5px; color: var(--ink-2); background: #fff; outline: none;
+  }
+  .p-add-device {
+    width: 100%; height: 29px; margin-top: 6px; border: 1px dashed #b9c0f2; border-radius: 7px;
+    background: #fff; color: var(--primary); font-size: 10.5px; font-weight: 600;
+  }
+  .p-add-device:hover { background: var(--primary-soft); }
+  .p-hint { font-size: 9.5px; color: #8a93a6; line-height: 1.45; margin-top: 6px; }
+
+  .p-state {
+    font-size: 9.5px; font-weight: 600; padding: 1px 6px; border-radius: 99px;
+    background: var(--blue-soft); color: var(--blue);
+  }
+  .p-status-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 8px; }
+  .p-status-row button {
+    height: 26px; border: 1px solid var(--line); background: #fff; border-radius: 6px;
+    font-size: 10px; color: var(--muted); padding: 0;
+  }
+  .p-status-row button.on { background: var(--blue-soft); border-color: #bcd0ff; color: var(--blue); font-weight: 600; }
+  .p-task {
+    display: flex; align-items: center; gap: 5px; background: #f8fafc;
+    border: 1px solid var(--line); border-radius: 7px; padding: 6px 7px; margin-bottom: 7px;
+  }
+  .p-task span { flex: 1; min-width: 0; font-size: 10.5px; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .p-task a { font-size: 9.5px; color: var(--primary); font-weight: 600; white-space: nowrap; }
+  .p-task a.muted { color: #a2adbf; font-weight: 500; }
+
+  .annotation {
+    position: absolute; left: 660px; top: 500px; display: inline-flex; align-items: center; gap: 5px;
+    padding: 5px 8px; border-radius: 8px; background: #fff; border: 1px solid #dfe4ff;
+    box-shadow: 0 6px 18px rgba(16,24,40,.14); color: var(--primary);
+    font-size: 10px; font-weight: 600; pointer-events: none;
+  }
+  .annotation::before {
+    content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--primary);
+  }
+</style>
+</head>
+<body class="editor-proto">
+<div class="screen">
+  <img class="shot" src="../../screenshots/06-editor.png" alt="拓扑编辑器">
+
+  <div class="selection"></div>
+
+  <div class="dev-badge" style="left:518px;top:349px">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M12 3 20 7.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="M12 12 20 7.5M12 12 4 7.5M12 12v9"/></svg>
+    设备 ×1
+  </div>
+  <div class="dev-badge" style="left:716px;top:349px">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M12 3 20 7.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="M12 12 20 7.5M12 12 4 7.5M12 12v9"/></svg>
+    设备 ×4
+  </div>
+  <div class="dev-badge" style="left:542px;top:575px">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M12 3 20 7.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="M12 12 20 7.5M12 12 4 7.5M12 12v9"/></svg>
+    设备 ×3
+  </div>
+  <div class="dev-badge" style="left:763px;top:575px">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M12 3 20 7.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="M12 12 20 7.5M12 12 4 7.5M12 12v9"/></svg>
+    设备 ×1
+  </div>
+  <div class="dev-badge" style="left:975px;top:349px">
+    <svg viewBox="0 0 24 24" fill="none"><path d="M12 3 20 7.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="M12 12 20 7.5M12 12 4 7.5M12 12v9"/></svg>
+    设备 ×2
+  </div>
+
+  <div class="annotation">节点左上角设备角标 · 点击定位</div>
+
+  <aside class="prop-panel">
+    <div class="prop-top">属性 <span>›</span></div>
+    <div class="prop-tabs">
+      <button class="active">属性</button>
+      <button>AI 助手</button>
+    </div>
+    <div class="prop-body">
+      <div class="p-node">
+        <span class="p-node-icon">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M4 8h16M4 16h16"/><path d="m8 5-4 3 4 3M16 13l4 3-4 3"/></svg>
+        </span>
+        <div>
+          <div class="p-node-name">核心交换机</div>
+          <div class="p-node-type">交换机 · 节点 n3</div>
+        </div>
+      </div>
+
+      <div class="p-sec">
+        <div class="p-row"><label>文本</label><input value="核心交换机"></div>
+        <div class="p-row"><label>位置</label><input value="710, 343"></div>
+        <div class="p-row two"><label>尺寸</label><input value="134"><input value="140"></div>
+      </div>
+
+      <div class="p-sec p-dev">
+        <div class="p-sec-head">
+          <b>TopoTash 设备</b>
+          <span class="p-sec-count">2 项</span>
+        </div>
+        <div class="p-dev-note">节点与项目「设备清单」双向联动。</div>
+
+        <div class="p-device">
+          <div class="p-device-top"><b>核心交换机</b><span class="p-pill selected">已选型</span></div>
+          <div class="p-device-sub">华为 S12700E-8 · 数量 ×2</div>
+          <div class="p-device-acts"><a href="#">打开设备</a><a href="#" class="muted">取消关联</a></div>
+        </div>
+
+        <div class="p-device">
+          <div class="p-device-top"><b>万兆接入交换机</b><span class="p-pill planned">规划中</span></div>
+          <div class="p-device-sub">华为 S5735-L24T4X · 数量 ×2</div>
+          <div class="p-device-acts"><a href="#">打开设备</a><a href="#" class="muted">取消关联</a></div>
+        </div>
+
+        <select class="p-select">
+          <option>关联已有设备…</option>
+          <option>负载均衡 · F5 BIG-IP i2600</option>
+          <option>备份软件 · 爱数 AnyBackup 8.0</option>
+        </select>
+        <button class="p-add-device">+ 新建并关联设备</button>
+        <div class="p-hint">设备清单在项目「设备清单」标签页统一维护；节点删除时只解除关联，不删除设备。</div>
+      </div>
+
+      <div class="p-sec">
+        <div class="p-sec-head">
+          <b>TopoTash 跟进</b>
+          <span class="p-state">进行中</span>
+        </div>
+        <div class="p-status-row">
+          <button>待跟进</button>
+          <button class="on">进行中</button>
+          <button>已完成</button>
+          <button>清除</button>
+        </div>
+        <div class="p-task">
+          <span>POC 网络方案与 VLAN 规划</span>
+          <a href="#">打开任务</a>
+          <a href="#" class="muted">取消</a>
+        </div>
+        <select class="p-select"><option>关联已有任务…</option></select>
+        <div class="p-hint">节点标记会出现在项目「关联视图」；任务与设备可以同时挂在一个节点上。</div>
+      </div>
+    </div>
+  </aside>
+</div>
+</body>
+</html>
