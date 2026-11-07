@@ -338,34 +338,37 @@
       // Show at most two device models, then a +N marker. Full list is in the
       // property panel and in the badge tooltip.
       const visible = devices.slice(0, 2);
-      const maxText = Math.max(42, Math.min(116, (shape.w || 120) - 26));
+      const maxText = Math.max(42, Math.min(96, (shape.w || 160) - 26));
       const title = devices
         .map(d => `${d.model || d.name || '设备'}${d.quantity ? ` ×${d.quantity}` : ''}`)
         .join('；') + '（点击查看设备）';
 
+      // 卡片式节点: 设备徽标横向排在卡片上方, 避免遮挡图标与标题
+      let bx = 0;
+      const badgeY = shape.y - 24;
       visible.forEach((device, index) => {
         const label = fitBadgeLabel(device.model || device.name || '设备', maxText);
         const width = Math.max(38, Math.ceil(measureBadgeText(label)) + 14);
         const badge = document.createElementNS(SVGNS, 'g');
         badge.setAttribute('class', 'tt-device-badge');
         badge.setAttribute('data-node', id);
-        badge.setAttribute('transform', `translate(${shape.x + 10} ${shape.y + 10 + index * 22})`);
+        badge.setAttribute('transform', `translate(${shape.x + bx} ${badgeY})`);
         badge.innerHTML = `<rect x="0" y="0" width="${width}" height="20" rx="7" fill="#162033" stroke="#ffffff" stroke-width="1.5"></rect>`
           + `<text x="${width / 2}" y="13.8" text-anchor="middle" fill="#ffffff" font-size="9.5" font-family="Microsoft YaHei, sans-serif" pointer-events="none">${esc(label)}</text>`;
         const badgeTitle = document.createElementNS(SVGNS, 'title');
         badgeTitle.textContent = title;
         badge.appendChild(badgeTitle);
         g.appendChild(badge);
+        bx += width + 5;
       });
 
       if (devices.length > visible.length) {
         const remaining = devices.length - visible.length;
-        const index = visible.length;
         const width = 34;
         const badge = document.createElementNS(SVGNS, 'g');
         badge.setAttribute('class', 'tt-device-badge');
         badge.setAttribute('data-node', id);
-        badge.setAttribute('transform', `translate(${shape.x + 10} ${shape.y + 10 + index * 22})`);
+        badge.setAttribute('transform', `translate(${shape.x + bx} ${badgeY})`);
         badge.innerHTML = `<rect x="0" y="0" width="${width}" height="20" rx="7" fill="#475569" stroke="#ffffff" stroke-width="1.5"></rect>`
           + `<text x="${width / 2}" y="13.8" text-anchor="middle" fill="#ffffff" font-size="9.5" font-family="Microsoft YaHei, sans-serif" pointer-events="none">+${remaining}</text>`;
         const badgeTitle = document.createElementNS(SVGNS, 'title');
