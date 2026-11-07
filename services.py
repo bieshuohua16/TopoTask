@@ -56,6 +56,31 @@ def text(value, default="") -> str:
     return str(value).strip()
 
 
+# 名称类字段的长度上限：防止超长文本撑爆卡片、列表与导出
+MAX_NAME_LENGTH = 200
+MAX_TITLE_LENGTH = 500
+MAX_DESCRIPTION_LENGTH = 20000
+
+
+def limit_text(value: str, limit: int, label: str) -> str:
+    """Reject over-long input instead of silently truncating user data."""
+    if len(value) > limit:
+        raise ApiError(f"{label}不能超过 {limit} 个字符", 400, "text_too_long")
+    return value
+
+
+def clean_iso_date(value, label: str) -> str | None:
+    """Validate an optional ISO date/datetime; blank input becomes ``None``."""
+    raw = text(value)
+    if not raw:
+        return None
+    try:
+        datetime.fromisoformat(raw.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ApiError(f"{label}格式不正确（应为 YYYY-MM-DD）", 400, "invalid_date") from exc
+    return raw
+
+
 def ensure_project(project_id: str) -> dict:
     row = get_db().execute("SELECT * FROM projects WHERE id = ?", (project_id,)).fetchone()
     if not row:
@@ -151,10 +176,18 @@ def clean_project_payload(data: dict, partial: bool = False) -> dict:
                 raise ApiError(f"{key} 必须是文本", 400, "invalid_field")
             out[key] = data[key]
     if "name" in out:
-        out["name"] = text(out["name"])
-    for key in ("code", "customer", "industry", "owner", "description"):
+        out["name"] = limit_text(text(out["name"]), MAX_NAME_LENGTH, "项目名称")
+    for key, label in (("code", "项目编号"), ("customer", "客户名称"),
+                       ("industry", "行业"), ("owner", "负责人")):
         if key in out:
-            out[key] = text(out[key])
+            out[key] = limit_text(text(out[key]), MAX_NAME_LENGTH, label)
+    if "description" in out:
+        out["description"] = limit_text(
+            text(out["description"]), MAX_DESCRIPTION_LENGTH, "项目描述"
+        )
+    for key, label in (("start_date", "开始日期"), ("end_date", "结束日期")):
+        if key in out:
+            out[key] = clean_iso_date(out[key], label)
     if "stage" in out:
         out["stage"] = clean_stage(out["stage"])
     if "status" in out:
@@ -399,6 +432,10 @@ def validate_task_payload(payload: dict) -> None:
             datetime.fromisoformat(payload["due_date"].replace("Z", "+00:00"))
         except ValueError as exc:
             raise ApiError("截止时间格式不正确", 400, "invalid_due_date") from exc
+    if isinstance(payload.get("title"), str):
+        limit_text(payload["title"], MAX_TITLE_LENGTH, "任务标题")
+    if isinstance(payload.get("description"), str):
+        limit_text(payload["description"], MAX_DESCRIPTION_LENGTH, "任务描述")
     if "tags" in payload and payload["tags"] is not None:
         if not isinstance(payload["tags"], list) or any(not isinstance(x, str) for x in payload["tags"]):
             raise ApiError("tags 必须是文本数组", 400, "invalid_tags")

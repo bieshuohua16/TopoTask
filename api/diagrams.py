@@ -7,10 +7,13 @@ from flask import Blueprint, jsonify, request
 
 from db import ApiError, dumps, get_db, new_id, utcnow
 from services import (
+    MAX_DESCRIPTION_LENGTH,
+    MAX_NAME_LENGTH,
     content_of,
     create_task_record,
     diagram_dict,
     ensure_project,
+    limit_text,
     log_activity,
     merge_followup_into_content,
     nodes_with_links,
@@ -159,14 +162,19 @@ def create_diagram():
     project_id = text(data.get("project_id")) or None
     if project_id:
         ensure_project(project_id)
-    name = text(data.get("name")) or "未命名拓扑图"
+    name = limit_text(
+        text(data.get("name")) or "未命名拓扑图", MAX_NAME_LENGTH, "拓扑图名称"
+    )
     content = data.get("content")
     if isinstance(content, dict) and isinstance(content.get("shapes"), dict):
         content = _normalise_content(content)
     else:
         content = copy.deepcopy(EMPTY_CONTENT)
+    description = limit_text(
+        text(data.get("description")), MAX_DESCRIPTION_LENGTH, "拓扑图描述"
+    )
     did = _create_diagram_record(
-        project_id, name, text(data.get("kind")), text(data.get("description")), content
+        project_id, name, text(data.get("kind")), description, content
     )
     get_db().commit()
     return jsonify(_diagram_with_counts(_get_diagram(did))), 201
@@ -191,9 +199,15 @@ def import_diagram():
     content = _normalise_content(data.get("content"))
     source_name = text(data.get("source_name"))
     name = _unique_diagram_name(
-        project_id, text(data.get("name")) or _import_diagram_name(source_name)
+        project_id,
+        limit_text(
+            text(data.get("name")) or _import_diagram_name(source_name),
+            MAX_NAME_LENGTH, "拓扑图名称",
+        ),
     )
-    description = text(data.get("description"))
+    description = limit_text(
+        text(data.get("description")), MAX_DESCRIPTION_LENGTH, "拓扑图描述"
+    )
     if not description and source_name:
         description = f"从 {source_name} 导入"
     did = _create_diagram_record(
@@ -287,6 +301,12 @@ def patch_diagram(diagram_id):
     for key in ("name", "description"):
         if key in data:
             fields[key] = text(data[key])
+    if "name" in fields:
+        fields["name"] = limit_text(fields["name"], MAX_NAME_LENGTH, "拓扑图名称")
+    if "description" in fields:
+        fields["description"] = limit_text(
+            fields["description"], MAX_DESCRIPTION_LENGTH, "拓扑图描述"
+        )
     if "kind" in data:
         fields["kind"] = _clean_kind(data["kind"], row["kind"])
     project_changed = False

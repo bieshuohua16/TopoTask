@@ -16,7 +16,7 @@ import sqlite3
 from urllib.parse import quote
 
 from db import ApiError, get_db, new_id, utcnow
-from services import ensure_project, log_activity, text
+from services import ensure_project, limit_text, log_activity, text
 
 CATEGORIES = ("server", "storage", "network", "security", "software", "other")
 CATEGORY_LABELS = {
@@ -78,6 +78,16 @@ def _clean_price(value):
     return round(max(0.0, number), 2)
 
 
+# Excel/WPS 会把以这些字符开头的单元格当作公式执行，导出时需要加前缀转义
+_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def csv_safe(value) -> str:
+    """Neutralise spreadsheet formulas in exported text cells."""
+    raw = "" if value is None else str(value)
+    return "'" + raw if raw.startswith(_CSV_FORMULA_PREFIXES) else raw
+
+
 def clean_device_payload(data: dict, partial: bool = False) -> dict:
     if not isinstance(data, dict):
         raise ApiError("设备数据格式错误", 400, "invalid_device")
@@ -86,8 +96,16 @@ def clean_device_payload(data: dict, partial: bool = False) -> dict:
         if key in data:
             out[key] = data[key]
     if "name" in out:
-        out["name"] = text(out["name"])
-    for key in ("brand", "model", "spec", "currency", "vendor", "owner", "note"):
+        out["name"] = limit_text(text(out["name"]), 200, "设备名称")
+    for key, label, limit in (
+        ("brand", "品牌", 100),
+        ("model", "型号", 100),
+        ("spec", "关键参数", 2000),
+        ("note", "备注", 2000),
+    ):
+        if key in out:
+            out[key] = limit_text(text(out[key]), limit, label)
+    for key in ("currency", "vendor", "owner"):
         if key in out:
             out[key] = text(out[key])
     if "category" in out:
@@ -524,20 +542,20 @@ def export_devices_csv(project_id: str) -> tuple[str, str]:
         price = row["unit_price"]
         total = round((row["quantity"] or 0) * price, 2) if price is not None else ""
         writer.writerow([
-            row["name"],
-            CATEGORY_LABELS.get(row["category"], row["category"]),
-            row["brand"],
-            row["model"],
-            row["spec"],
+            csv_safe(row["name"]),
+            csv_safe(CATEGORY_LABELS.get(row["category"], row["category"])),
+            csv_safe(row["brand"]),
+            csv_safe(row["model"]),
+            csv_safe(row["spec"]),
             row["quantity"],
-            row["unit"],
-            STATUS_LABELS.get(row["status"], row["status"]),
+            csv_safe(row["unit"]),
+            csv_safe(STATUS_LABELS.get(row["status"], row["status"])),
             "" if price is None else f"{price:.2f}",
             "" if total == "" else f"{total:.2f}",
-            row["vendor"],
-            row["owner"],
-            row["note"],
-            linked,
+            csv_safe(row["vendor"]),
+            csv_safe(row["owner"]),
+            csv_safe(row["note"]),
+            csv_safe(linked),
         ])
     filename = f"设备清单-{(project['name'] if project else '项目')}.csv"
     filename = filename.replace("/", "_").replace("\\", "_")
@@ -602,12 +620,17 @@ def _clean_template_payload(data: dict, partial: bool = False) -> dict:
         if key in data:
             out[key] = data[key]
     if "name" in out:
-        out["name"] = text(out["name"])
+        out["name"] = limit_text(text(out["name"]), 200, "模板名称")
         if not out["name"]:
             out.pop("name")
-    for key in ("brand", "model", "spec", "note"):
+    for key, label, limit in (
+        ("brand", "品牌", 100),
+        ("model", "型号", 100),
+        ("spec", "关键参数", 2000),
+        ("note", "备注", 2000),
+    ):
         if key in out:
-            out[key] = text(out[key])
+            out[key] = limit_text(text(out[key]), limit, label)
     if "category" in out:
         out["category"] = _category_from_text(out["category"], "server")
     if "unit" in out:

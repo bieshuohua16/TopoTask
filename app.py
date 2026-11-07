@@ -34,6 +34,8 @@ def create_app(test_config: dict | None = None) -> Flask:
     app.config.from_mapping(
         SECRET_KEY=os.environ.get("TOPOTASH_SECRET", "topotash-local-dev"),
         DATABASE=os.environ.get("TOPOTASH_DB", str(BASE_DIR / "topotash.db")),
+        # 画布 JSON 内嵌 base64 图片，留足空间；超过上限的请求返回 413
+        MAX_CONTENT_LENGTH=32 * 1024 * 1024,
     )
     if test_config:
         app.config.update(test_config)
@@ -143,8 +145,12 @@ def create_app(test_config: dict | None = None) -> Flask:
     @app.errorhandler(HTTPException)
     def handle_http_error(exc: HTTPException):
         if request.path.startswith("/api/"):
+            message = exc.description
+            if exc.code == 413:
+                limit = app.config.get("MAX_CONTENT_LENGTH") or 0
+                message = f"请求体超过 {limit // (1024 * 1024)} MB 上限"
             return (
-                jsonify({"error": {"code": exc.name.lower().replace(" ", "_"), "message": exc.description}}),
+                jsonify({"error": {"code": exc.name.lower().replace(" ", "_"), "message": message}}),
                 exc.code,
             )
         return exc

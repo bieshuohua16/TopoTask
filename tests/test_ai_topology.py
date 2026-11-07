@@ -93,10 +93,15 @@ class TopologyAITest(ApiTestCase):
             (TimeoutError("slow"), 504, "ai_timeout"),
         ):
             with self.subTest(code=code):
-                with mock.patch("services_ai.urllib.request.urlopen", side_effect=exception):
-                    response = self.client.post("/api/ai/topology", json={"messages": self.messages})
-                self.assertEqual(response.status_code, status)
-                self.assertEqual(response.get_json()["error"]["code"], code)
+                try:
+                    with mock.patch("services_ai.urllib.request.urlopen", side_effect=exception):
+                        response = self.client.post("/api/ai/topology", json={"messages": self.messages})
+                    self.assertEqual(response.status_code, status)
+                    self.assertEqual(response.get_json()["error"]["code"], code)
+                finally:
+                    close = getattr(exception, "close", None)
+                    if close is not None:
+                        close()
 
     def test_stream_failure_is_reported_and_response_closed(self):
         self.configure()
@@ -119,8 +124,12 @@ class TopologyAITest(ApiTestCase):
         project = self.new_project()
 
         def open_response(*_args, **_kwargs):
-            with sqlite3.connect(self.db_path, timeout=0.05) as other:
+            other = sqlite3.connect(self.db_path, timeout=0.05)
+            try:
                 other.execute("UPDATE projects SET owner='Available' WHERE id=?", (project["id"],))
+                other.commit()
+            finally:
+                other.close()
             return io.BytesIO(b"data: [DONE]\n\n")
 
         with mock.patch("services_ai.urllib.request.urlopen", side_effect=open_response):

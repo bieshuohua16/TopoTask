@@ -32,6 +32,41 @@
       </article>`;
   }
 
+  function syncStageUI() {
+    document.querySelectorAll('#stageFilter .chip').forEach(c => c.classList.toggle('active', c.dataset.stage === currentStage));
+    document.querySelectorAll('#stagePipeline .pipe-cell').forEach(c => c.classList.toggle('active', c.dataset.stage === currentStage));
+  }
+
+  function renderPipeline() {
+    const box = document.getElementById('stagePipeline');
+    if (!box) return;
+    const stages = TT_CONFIG.stages || [];
+    box.innerHTML = stages.map((s, i) => {
+      const key = s.key;
+      const ps = allProjects.filter(p => p.stage === key);
+      const total = ps.reduce((acc, p) => acc + (p.task_total || 0), 0);
+      const done = ps.reduce((acc, p) => acc + (p.task_done || 0), 0);
+      const pct = total ? Math.round(done / total * 100) : 0;
+      return `
+        <button class="pipe-cell" type="button" data-stage="${key}">
+          <div class="pipe-top">
+            <span class="pipe-name"><i></i>${TT.esc(s.label || key)}</span>
+            <span class="pipe-num">0${i + 1}</span>
+          </div>
+          <b>${ps.length}</b><em>个项目 · ${total} 个任务</em>
+          <div class="pipe-bar"><i style="width:${pct}%"></i></div>
+        </button>`;
+    }).join('');
+    box.querySelectorAll('.pipe-cell').forEach(cell => {
+      cell.onclick = () => {
+        currentStage = cell.dataset.stage;
+        syncStageUI();
+        renderProjects();
+      };
+    });
+    syncStageUI();
+  }
+
   function renderProjects() {
     const grid = document.getElementById('projectGrid');
     const empty = document.getElementById('projectEmpty');
@@ -106,6 +141,7 @@
       stat('diagram_total', data.diagram_total);
       stat('followup_total', data.followup_total);
       allProjects = data.projects;
+      renderPipeline();
       renderProjects();
       renderUpcoming(data.upcoming);
       renderFollowups(data.followups);
@@ -117,7 +153,7 @@
   document.querySelectorAll('#stageFilter .chip').forEach(chip => {
     chip.onclick = () => {
       currentStage = chip.dataset.stage;
-      document.querySelectorAll('#stageFilter .chip').forEach(c => c.classList.toggle('active', c === chip));
+      syncStageUI();
       renderProjects();
     };
   });

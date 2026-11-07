@@ -96,12 +96,16 @@ class DraftRegressionTest(ApiTestCase):
         ])
 
         def model(*_args, **_kwargs):
-            with sqlite3.connect(self.db_path, timeout=0.05) as other:
+            other = sqlite3.connect(self.db_path, timeout=0.05)
+            try:
                 self.assertGreater(other.execute(
                     "SELECT COUNT(*) FROM ai_messages WHERE conversation_id=?",
                     (self.conversation["id"],),
                 ).fetchone()[0], 0)
                 other.execute("UPDATE projects SET owner='Concurrent writer' WHERE id=?", (self.project["id"],))
+                other.commit()
+            finally:
+                other.close()
             return next(replies)
 
         with mock.patch("services_ai.chat_completion", side_effect=model) as client:
@@ -209,6 +213,60 @@ class QueryRegressionTest(ApiTestCase):
         self.assertEqual(item["project_name"], project["name"])
         for key in ("node_count", "followup_count", "linked_task_count", "task_link_count"):
             self.assertEqual(item[key], detail[key])
+
+
+class InputValidationTest(ApiTestCase):
+    """Edge inputs must fail with 400/413 instead of silently corrupting data."""
+
+    def test_project_dates_are_validated(self):
+        project = self.new_project(name="日期项目", start_date="2026-01-05")
+        self.assertEqual(project["start_date"], "2026-01-05")
+
+        bad = self.client.patch(f"/api/projects/{project['id']}", json={"start_date": "2026-13-45"})
+        self.assertEqual(bad.status_code, 400)
+        self.assertEqual(bad.get_json()["error"]["code"], "invalid_date")
+        bad_end = self.client.patch(f"/api/projects/{project['id']}", json={"end_date": "明天"})
+        self.assertEqual(bad_end.status_code, 400)
+
+        cleared = self.client.patch(f"/api/projects/{project['id']}", json={"start_date": ""})
+        self.assertEqual(cleared.status_code, 200)
+        self.assertIsNone(cleared.get_json()["start_date"])
+
+    def test_over_long_text_is_rejected(self):
+        project = self.new_project()
+        cases = [
+            ("POST", "/api/projects", {"name": "y" * 201}),
+            ("POST", "/api/tasks", {"project_id": project["id"], "title": "x" * 501}),
+            ("POST", "/api/devices", {"project_id": project["id"], "name": "x" * 201}),
+            ("POST", "/api/diagrams", {"project_id": project["id"], "name": "x" * 201}),
+        ]
+        for method, path, payload in cases:
+            response = self.client.open(path, method=method, json=payload)
+            self.assertEqual(response.status_code, 400, response.get_data(as_text=True))
+            self.assertEqual(response.get_json()["error"]["code"], "text_too_long")
+
+    def test_device_csv_export_neutralises_formulas(self):
+        project = self.new_project()
+        self.client.post("/api/devices", json={
+            "project_id": project["id"], "name": "=cmd|'/c calc'!A1",
+            "brand": "+1+1", "note": "@SUM(1)",
+        })
+        response = self.client.get(f"/api/projects/{project['id']}/devices/export.csv")
+        body = response.get_data(as_text=True)
+        row = next(line for line in body.splitlines() if "calc" in line)
+        self.assertIn("'=cmd", row)
+        self.assertIn("'+1+1", row)
+        self.assertIn("'@SUM(1)", row)
+
+    def test_oversized_request_is_rejected(self):
+        project = self.new_project()
+        self.app.config["MAX_CONTENT_LENGTH"] = 1024
+        response = self.client.post(
+            "/api/tasks",
+            json={"project_id": project["id"], "title": "t", "description": "d" * 4096},
+        )
+        self.assertEqual(response.status_code, 413)
+        self.assertEqual(response.get_json()["error"]["code"], "request_entity_too_large")
 
 
 class ShortcutRegressionTest(ApiTestCase):
