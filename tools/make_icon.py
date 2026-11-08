@@ -1,7 +1,8 @@
 """Generate the TopoTash Windows icon (``static/topotash.ico``).
 
 The project's ``static/favicon.svg`` is redrawn here as a scalable raster:
-rounded square with an indigo → cyan gradient and a white network glyph.
+rounded square with an indigo → cyan gradient and a white node-link glyph
+(three rings connected as a small git-style branch, matching favicon.svg).
 Only the standard library is used, so no Pillow is required.
 
 Usage:
@@ -11,6 +12,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import math
 import struct
 import zlib
 from pathlib import Path
@@ -24,11 +26,41 @@ COLOR_TO = (34, 211, 238)     # #22d3ee
 WHITE = (255, 255, 255)
 
 VIEW = 32.0
-CORNER_RADIUS = 8.0
-STROKE_HALF = 1.0             # stroke-width: 2
+CORNER_RADIUS = 9.0
+STROKE_HALF = 1.025           # stroke-width: 2.05
+GLYPH_ANGLE = -4.0            # 整体微倾，避免等边三角形的呆板感
 
-CIRCLES = ((10.0, 10.0, 3.2), (23.0, 9.0, 3.2), (16.0, 23.0, 3.2))
-CAPSULES = ((13.0, 11.2, 14.8, 20.0), (19.8, 11.0, 17.4, 20.0), (13.0, 9.0, 19.5, 9.0))
+
+def _rotate(x: float, y: float) -> tuple[float, float]:
+    rad = math.radians(GLYPH_ANGLE)
+    dx, dy = x - 16.0, y - 16.0
+    return 16.0 + dx * math.cos(rad) - dy * math.sin(rad), 16.0 + dx * math.sin(rad) + dy * math.cos(rad)
+
+
+# 三个圆环节点 + 主干 / 分支连接（原版节点位置，只改连线结构）
+CIRCLES = (
+    (*_rotate(10.0, 9.5), 3.5),
+    (*_rotate(16.0, 23.5), 3.5),
+    (*_rotate(23.0, 8.8), 3.3),
+)
+CAPSULES = (
+    (*_rotate(11.5, 12.5), *_rotate(14.9, 20.2)),
+)
+
+
+def _cubic(p0, p1, p2, p3, steps: int = 8) -> tuple[tuple[float, float], ...]:
+    pts = []
+    for i in range(steps + 1):
+        t = i / steps
+        mt = 1.0 - t
+        x = mt ** 3 * p0[0] + 3 * mt * mt * t * p1[0] + 3 * mt * t * t * p2[0] + t ** 3 * p3[0]
+        y = mt ** 3 * p0[1] + 3 * mt * mt * t * p1[1] + 3 * mt * t * t * p2[1] + t ** 3 * p3[1]
+        pts.append(_rotate(x, y))
+    return tuple(pts)
+
+
+# 原版节点之间的分支连线是一条弧线，光栅化时按曲线采样成多段胶囊
+BRANCH = _cubic((13.0, 16.2), (15.6, 14.8), (18.6, 12.6), (20.2, 10.8))
 
 ICON_SIZES = (16, 24, 32, 48, 64, 128, 256)
 
@@ -65,6 +97,9 @@ def _in_glyph(x: float, y: float) -> bool:
         if _in_ring(x, y, cx, cy, radius):
             return True
     for x1, y1, x2, y2 in CAPSULES:
+        if _in_capsule(x, y, x1, y1, x2, y2):
+            return True
+    for (x1, y1), (x2, y2) in zip(BRANCH, BRANCH[1:]):
         if _in_capsule(x, y, x1, y1, x2, y2):
             return True
     return False

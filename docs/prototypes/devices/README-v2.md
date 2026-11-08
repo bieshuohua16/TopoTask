@@ -1,6 +1,6 @@
 # 设备清单迭代 · 型号角标 / 模板库
 
-> 状态：**已实现（2026-11）**。本目录保留确认用原型；实际界面见：
+> 状态：**已实现（2026-11）**。本目录保留确认用原型；实际界面已改为靛蓝主题 + 设备卡片，截图见：
 > [12-template-library.png](../../screenshots/12-template-library.png)、
 > [15-topology-device-panel.png](../../screenshots/15-topology-device-panel.png)、
 > [16-actual-device-modal-blank.png](../../screenshots/16-actual-device-modal-blank.png)、
@@ -10,9 +10,11 @@
 
 ## 1. 拓扑节点角标：显示型号，而不是「设备 ×N」
 
+> 已演进：2026-11 的编辑器改版把节点改成 180×60 宽卡片，左侧图形、右侧设备名称与「型号 × 数量」，不再绘制角标。本节仅保留 v2 原型记录，当前实现见 [DESIGN.md 5.3 / 5.6](../../DESIGN.md#53-拓扑编辑器桥接)。
+
 原型：[06-model-labels.png](06-model-labels.png)
 
-规则：
+规则（v2 原型，已被设备卡片取代）：
 
 - 优先显示设备的 `model`（型号）；型号为空时显示设备 `name`。
 - 不再显示 `设备 ×N`，也不在角标上显示数量；数量在属性面板/设备清单中查看。

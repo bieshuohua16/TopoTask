@@ -279,7 +279,7 @@
 
     const modal = TT.modal({
       title: isEdit ? '编辑设备' : '新增设备',
-      subtitle: '设备属于「' + projectName() + '」。关联拓扑节点后，节点左上角会显示设备角标。',
+      subtitle: '设备属于「' + projectName() + '」。关联拓扑节点后，节点会以设备卡片显示设备名称与型号。',
       width: 760,
       body: formHtml(device),
       submitText: isEdit ? '保存设备' : '创建设备',

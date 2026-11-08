@@ -27,6 +27,14 @@ class IconGeneratorTest(unittest.TestCase):
             self.assertGreater(length, 0)
             self.assertLessEqual(offset + length, len(data))
 
+    def test_render_uses_brand_blue(self):
+        rgba = render_rgba(32)
+        offset = (5 * 32 + 5) * 4
+        red, green, blue, alpha = rgba[offset:offset + 4]
+        self.assertEqual(alpha, 255)
+        self.assertGreater(blue, red, "图标底色应为靛蓝渐变")
+        self.assertGreater(blue, green)
+
     def test_render_is_transparent_at_rounded_corner(self):
         rgba = render_rgba(32)
         self.assertEqual(len(rgba), 32 * 32 * 4)

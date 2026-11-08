@@ -68,11 +68,11 @@ def _task(pid, cid, title, stage, status="todo", priority=2, due_days=None, desc
 
 def _shape(node_id, kind, label, x, y, fields=None):
     return {
-        "id": node_id, "type": "shape", "kind": kind, "x": x, "y": y, "w": 120, "h": 120,
+        "id": node_id, "type": "shape", "kind": kind, "x": x, "y": y, "w": 180, "h": 60,
         "rot": 0, "flipH": False, "flipV": False, "fill": "#5b6cf0", "stroke": "none",
         "strokeWidth": 1.6, "dash": None, "opacity": 1, "fillOpacity": 1, "radius": 10,
-        "text": label, "textColor": "#1f2329", "fontSize": 13, "fontFamily": "Microsoft YaHei",
-        "bold": True, "italic": False, "textAlign": "center", "textVAlign": "bottom",
+        "text": label, "textColor": "#1f2329", "fontSize": 12.5, "fontFamily": "Microsoft YaHei",
+        "bold": True, "italic": False, "textAlign": "center", "textVAlign": "middle",
         "imgFit": "fill", "image": None, "origRatio": None, "lockRatio": True,
         "fields": [{"k": k, "v": v} for k, v in (fields or [])],
     }
@@ -177,12 +177,12 @@ def seed_demo() -> int:
 
     shapes = [
         _shape("n1", "globe", "互联网", 60, 60, [("带宽", "1Gbps"), ("状态", "online")]),
-        _shape("n2", "firewall", "边界防火墙", 230, 60, [("型号", "USG6650E"), ("状态", "online"), ("CPU", "23%")]),
-        _shape("n3", "switch", "核心交换机", 400, 60, [("堆叠", "2 台"), ("端口", "48×10GE")]),
-        _shape("n4", "server", "计算节点 ×3", 250, 250, [("CPU", "2×6338"), ("内存", "512G"), ("GPU", "2×A100")]),
-        _shape("n5", "storage", "分布式存储", 440, 250, [("容量", "120TB"), ("IOPS", "180K")]),
-        _shape("n6", "db", "Oracle 集群", 620, 250, [("版本", "19c"), ("RAC", "2 节点")]),
-        _shape("n7", "pc", "运维终端", 620, 60, [("网段", "10.10.8.0/24")]),
+        _shape("n2", "firewall", "边界防火墙", 280, 60, [("型号", "USG6650E"), ("状态", "online"), ("CPU", "23%")]),
+        _shape("n3", "switch", "核心交换机", 500, 60, [("堆叠", "2 台"), ("端口", "48×10GE")]),
+        _shape("n4", "server", "计算节点 ×3", 280, 240, [("CPU", "2×6338"), ("内存", "512G"), ("GPU", "2×A100")]),
+        _shape("n5", "storage", "分布式存储", 500, 240, [("容量", "120TB"), ("IOPS", "180K")]),
+        _shape("n6", "db", "Oracle 集群", 720, 240, [("版本", "19c"), ("RAC", "2 节点")]),
+        _shape("n7", "pc", "运维终端", 720, 60, [("网段", "10.10.8.0/24")]),
     ]
     edges = [
         _connector("c1", "n1", "n2", "10G"),
@@ -201,9 +201,9 @@ def seed_demo() -> int:
     shapes2 = [
         _shape("n1", "cloud", "私有云平台", 220, 40, [("架构", "IaaS + PaaS")]),
         _shape("n2", "cluster", "管理集群", 60, 220, [("节点", "3"), ("状态", "online")]),
-        _shape("n3", "cluster", "业务集群", 240, 220, [("节点", "6"), ("CPU", "62%")]),
-        _shape("n4", "storage", "块存储池", 420, 220, [("容量", "200TB")]),
-        _shape("n5", "db", "云数据库", 600, 220, [("类型", "MySQL/PG")]),
+        _shape("n3", "cluster", "业务集群", 260, 220, [("节点", "6"), ("CPU", "62%")]),
+        _shape("n4", "storage", "块存储池", 460, 220, [("容量", "200TB")]),
+        _shape("n5", "db", "云数据库", 660, 220, [("类型", "MySQL/PG")]),
     ]
     edges2 = [
         _connector("c1", "n1", "n2"), _connector("c2", "n1", "n3"),
@@ -234,12 +234,12 @@ def seed_demo() -> int:
 
     shapes3 = [
         _shape("n1", "cloud", "集团总部", 60, 40, [("链路", "双线 500M")]),
-        _shape("n2", "firewall", "出口防火墙", 240, 40, [("HA", "主备")]),
-        _shape("n3", "router", "核心路由", 420, 40, [("协议", "OSPF")]),
+        _shape("n2", "firewall", "出口防火墙", 280, 40, [("HA", "主备")]),
+        _shape("n3", "router", "核心路由", 500, 40, [("协议", "OSPF")]),
         _shape("n4", "switch", "生产网接入", 180, 240, [("VLAN", "10/20/30")]),
-        _shape("n5", "switch", "办公网接入", 360, 240, [("VLAN", "100")]),
-        _shape("n6", "switch", "安防网接入", 540, 240, [("VLAN", "200")]),
-        _shape("n7", "server", "MES 服务器", 700, 240, [("系统", "MES 3.2")]),
+        _shape("n5", "switch", "办公网接入", 380, 240, [("VLAN", "100")]),
+        _shape("n6", "switch", "安防网接入", 580, 240, [("VLAN", "200")]),
+        _shape("n7", "server", "MES 服务器", 780, 240, [("系统", "MES 3.2")]),
     ]
     edges3 = [
         _connector("c1", "n1", "n2"), _connector("c2", "n2", "n3"),
@@ -266,12 +266,12 @@ def seed_demo() -> int:
 
     shapes4 = [
         _shape("n1", "cloud", "政务外网", 40, 40, [("出口", "双链路")]),
-        _shape("n2", "firewall", "边界安全区", 200, 40, [("等保", "三级")]),
-        _shape("n3", "switch", "核心交换区", 370, 40, [("架构", "双核心")]),
-        _shape("n4", "server", "计算资源池", 180, 240, [("节点", "40"), ("CPU", "80%")]),
-        _shape("n5", "storage", "集中存储", 360, 240, [("容量", "1PB")]),
-        _shape("n6", "db", "政务数据库", 540, 240, [("类型", "达梦/人大金仓")]),
-        _shape("n7", "globe", "互联网区", 700, 40, [("隔离", "网闸")]),
+        _shape("n2", "firewall", "边界安全区", 240, 40, [("等保", "三级")]),
+        _shape("n3", "switch", "核心交换区", 440, 40, [("架构", "双核心")]),
+        _shape("n4", "server", "计算资源池", 200, 240, [("节点", "40"), ("CPU", "80%")]),
+        _shape("n5", "storage", "集中存储", 400, 240, [("容量", "1PB")]),
+        _shape("n6", "db", "政务数据库", 600, 240, [("类型", "达梦/人大金仓")]),
+        _shape("n7", "globe", "互联网区", 660, 40, [("隔离", "网闸")]),
     ]
     edges4 = [
         _connector("c1", "n1", "n2"), _connector("c2", "n2", "n3"),

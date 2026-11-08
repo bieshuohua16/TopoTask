@@ -9,7 +9,8 @@ TopoTash 是一个自带后端的完整 Web 应用。每个项目下有多个任
 - 项目设备清单：方案级 BOM、类别/状态/数量/价格、CSV 导出，设备↔拓扑节点双向关联
 - 全局设备模板库：手动录入或 CSV 导入常用设备，设备弹窗/拓扑节点可直接套用模板后再按项目修改
 - 全局 AI 助手：一处配置 OpenAI 兼容 API，向导式新建项目、管理任务；所有写入先生成草稿，确认后执行
-- 拓扑编辑器：系统架构图、逻辑拓扑、POC 部署图，节点级任务/设备联动；节点角标优先显示设备型号；支持 JSON / PNG / SVG / reveal.js 片段导出，画布自动保存到 TopoTash
+- 拓扑编辑器：系统架构图、逻辑拓扑、POC 部署图，节点级任务/设备联动；节点为 180×60 宽卡片，直接显示绑定的设备名称与「型号 × 数量」；支持 JSON / PNG / SVG / reveal.js 片段导出，画布自动保存到 TopoTash
+- 靛蓝品牌视觉：深蓝导航侧栏 + 浅灰工作区，顶栏固定全局搜索、AI 助手与新建项目；品牌标、favicon 与桌面快捷方式统一为蓝底圆环节点网络；拓扑画布复用同一套设计 token
 - SQLite 持久化，数据全部落在项目根目录，离线可用
 
 ![项目总览](docs/screenshots/01-dashboard.png)
@@ -20,7 +21,7 @@ TopoTash 是一个自带后端的完整 Web 应用。每个项目下有多个任
 |---|---|
 | ![阶段看板](docs/screenshots/02-board.png) | ![原生任务台](docs/screenshots/04-project-tasks.png) |
 
-| 任务详情 | 任务看板 |
+| 任务详情（抽屉） | 任务看板 |
 |---|---|
 | ![任务详情](docs/screenshots/04b-task-detail.png) | ![任务看板](docs/screenshots/04c-task-board.png) |
 
@@ -28,21 +29,25 @@ TopoTash 是一个自带后端的完整 Web 应用。每个项目下有多个任
 |---|---|
 | ![项目概览](docs/screenshots/03-project-overview.png) | ![拓扑图库](docs/screenshots/05-project-diagrams.png) |
 
-| 拓扑编辑器（节点跟进） | 关联视图 |
+| 拓扑编辑器（180×60 设备卡片） | 关联视图 |
 |---|---|
 | ![拓扑编辑器](docs/screenshots/06-editor.png) | ![关联视图](docs/screenshots/07-links.png) |
 
-| 拓扑图类型缩略图（逻辑拓扑 / 系统架构 / 部署图 / 其他） |
+| 拓扑图库（类型缩略图 / 复制 / 绑定项目） |
 |---|
-| ![类型缩略图](docs/screenshots/08-diagram-thumbnails.png) |
+| ![拓扑图库缩略图](docs/screenshots/08-diagram-library.png) |
 
 | 项目设备清单 | 设备模板库 |
 |---|---|
 | ![设备清单](docs/screenshots/13-project-devices-v2.png) | ![设备模板库](docs/screenshots/12-template-library.png) |
 
-| 新增设备（可选模板） | 拓扑节点设备联动 |
+| 新增设备（可选模板） | 从模板带入字段 |
 |---|---|
-| ![新增设备](docs/screenshots/16-actual-device-modal-blank.png) | ![拓扑节点设备联动](docs/screenshots/15-topology-device-panel.png) |
+| ![新增设备](docs/screenshots/16-actual-device-modal-blank.png) | ![从模板新建设备](docs/screenshots/19-actual-template-preview.png) |
+
+| 拓扑节点设备面板 | 全局 AI 助手 |
+|---|---|
+| ![拓扑节点设备联动](docs/screenshots/15-topology-device-panel.png) | ![AI 助手](docs/screenshots/21-ai-assistant.png) |
 
 ## 快速开始
 
@@ -88,7 +93,7 @@ python -m pip install flask
 # 2. 初始化数据库（生成 topotash.db；首次启动也会自动创建）
 python app.py init-db
 
-# 3. 可选：写入 4 个示例项目 / 23 个任务 / 5 张拓扑图
+# 3. 可选：写入 4 个示例项目 / 23 个任务 / 5 张拓扑图（画布节点为 180×60 蓝色卡片）
 python app.py seed-demo
 
 # 4. 启动（debug，127.0.0.1:5000）
@@ -139,7 +144,7 @@ python -m unittest discover -s tests -t . -v
 
 TopoTash 由一个 Flask 应用统一托管：
 
-- **Shell**：Jinja 页面骨架 + 原生 JS，负责项目导航、总览、阶段看板与项目工作台。
+- **Shell**：Jinja 页面骨架 + 原生 JS，负责深色侧栏项目导航、顶栏全局搜索、总览、阶段看板与项目工作台。
 - **原生任务台**：`static/js/tasks.js` + REST API，按项目/阶段直接读写 `tasks` 表，不再嵌套旧 TodoFlow 页面。
 - **设备清单**：`static/js/devices.js` + `services_devices.py`。设备属于项目，`device_node_links` 维护设备与拓扑节点的多对多关联；清单页负责 CRUD/汇总/CSV，拓扑属性面板负责关联与新建。
 - **设备模板库**：`templates/device_templates.html` + `static/js/device-templates.js` + `device_templates` 表。模板全局共享，CSV 预览/导入由服务端解析；设备创建时只复制字段，不存模板外键。
@@ -215,7 +220,9 @@ TopoTash/
 │   ├── DESIGN.md               # 数据模型、Schema、API、前端架构
 │   ├── DESIGN-TEAM.md          # 多用户 / 团队 / 权限设计 + 宝塔部署方案（v1.1）
 │   ├── API.md                  # REST API 明细
-│   └── screenshots/
+│   ├── ui-prototype.html       # 四套主题、七个页面的静态 UI 原型
+│   ├── prototypes/             # 设备清单 / 拓扑联动的历史静态原型
+│   └── screenshots/            # README 与设计文档使用的当前界面截图
 ├── licenses/
 │   └── THIRD_PARTY_NOTICES.md  # 第三方组件与许可
 ├── .gitignore
@@ -311,12 +318,13 @@ POST   /api/ai/actions/<id>/cancel            取消草稿
 ## 设计说明
 
 - 技术选型：Flask 3 + sqlite3 标准库 + Jinja + 原生 JS，无 ORM、无前端构建步骤，便于本地运行和二次修改。
+- 视觉基线：靛蓝 `#4f5bd5` 主色 + 深蓝侧栏 + 浅灰画布，设计 token 集中在 `static/css/topotash.css` 的 `:root`，拓扑编辑器、设备清单和设备模板页复用同一套颜色、圆角与阴影；品牌图标为三颗圆环节点 + 主干/分支连线的蓝底白色网络标（`static/favicon.svg` 与 `static/topotash.ico` 同源）。
 - 任务归属项目；拓扑图可先放在图库中，再绑定项目。跨项目查询由聚合接口完成。
 - 节点索引：`diagram_nodes` 不是画布副本，而是从 `content_json` 解析出的「可检索节点」，保存画布时增量 upsert、删除已不存在的节点。
 - 节点角标状态：`diagram_nodes.followup_status` 与主任务状态联动；任务完成时自动把角标改成「已完成」。
 - 自动保存：拓扑编辑器修改、撤销和重做后 900ms 防抖 PUT；保存期间的新改动会继续保存，完成前保留未保存标记。原生任务台按操作立即 PATCH/POST，项目统计通过事件刷新。
 - 任务台不再嵌套 TodoFlow：列表按售前阶段分组，看板按状态分列，任务详情直接管理子任务、标签、关联图纸和拓扑节点。
-- 设备清单是项目级 BOM：设备与拓扑节点通过 `device_node_links` 多对多关联；节点左上角优先显示设备型号（无型号显示设备名称），最多显示 2 个型号 + `+N`；节点删除只解除关联，设备删除级联清理关联。
+- 设备清单是项目级 BOM：设备与拓扑节点通过 `device_node_links` 多对多关联；节点绑定设备后改成 180×60 宽卡片（左侧设备图形、右侧名称与副标题），首行显示全部设备名称、次行显示「型号 × 数量」（多设备用「；」分隔），集群节点保留群集图形；完整列表在属性面板，节点删除只解除关联，设备删除级联清理关联。
 - 设备模板是全局预设：`device_templates` 不绑定项目，设备保存时只复制模板字段，因此改模板不会影响历史项目；模板不要求设备名称，按「品牌+型号」识别，字段不包含项目数量、供应商、负责人。
 - 设备模板 CSV 由服务端生成表头并解析：支持 UTF-8/BOM/GBK、中文类别；导入先预览，重复键为「品牌+型号」，默认跳过、可切换覆盖。
 - 设备金额只用于方案估算：`quantity × unit_price`，单价为空时不参与合计；CSV 导出带 UTF-8 BOM，方便 Excel 打开。
@@ -335,7 +343,7 @@ POST   /api/ai/actions/<id>/cancel            取消草稿
 - AI 模型需支持 OpenAI 兼容的 `tools` / function calling，否则无法生成项目/任务草稿。
 - 设备清单首版支持手动新增、编辑、筛选、CSV 导出与拓扑节点关联；设备清单 CSV/Excel 导入、从拓扑批量生成、设备↔任务、AI 管理设备暂未实现。
 - 设备模板库支持手动录入与 CSV 导入；暂不提供模板导出、模板默认数量/供应商、批量删除；模板 CSV 下载为仅表头的标准格式。
-- 拓扑节点设备角标按型号显示，最多 2 个型号 + `+N`；完整列表在属性面板，过长型号会截断并保留悬浮提示。
+- 拓扑节点绑定设备后以 180×60 宽卡片显示设备名称与「型号 × 数量」，多设备用「；」连接；节点右上角仍保留任务跟进角标；完整列表在属性面板，过长型号会截断并保留悬浮提示。
 - 设备关联的节点数量默认等于设备数量；暂未提供逐节点数量编辑界面（数据模型已保留 `device_node_links.quantity`）。
 - 全局搜索暂不检索设备名称/型号/设备模板；设备清单与模板库页内搜索可用。
 - API Key 以明文保存在本地 SQLite；本应用默认只监听 `127.0.0.1`，请勿直接暴露到公网。

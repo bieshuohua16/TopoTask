@@ -11,9 +11,9 @@
    品牌色: Indigo 渐变   |   间距: 8pt 体系   |   圆角: 8/12/16
    ================================================================ */
 :root{
-  /* 品牌色阶 — 联想官方 Signature Red: PMS 485C / RGB 225,37,27 / #E1251B */
-  --brand-50:#faecEB; --brand-100:#f7ddd9; --brand-200:#f0c7bf; --brand-300:#f26a52;
-  --brand-400:#e1251b; --brand-500:#e1251b; --brand-600:#c81f18; --brand-700:#b8252e;
+  /* 品牌色阶 — Indigo（#4F5BD5），保留 2026-11 改版布局与图标 */
+  --brand-50:#eef1ff; --brand-100:#e2e7ff; --brand-200:#c7d0fe; --brand-300:#9fb0fc;
+  --brand-400:#7c8df8; --brand-500:#5b6cf0; --brand-600:#4a5ae0; --brand-700:#3d4bc0;
   /* 中性色 */
   --ink-900:#1a1c1f; --ink-700:#33383f; --ink-600:#474c54; --ink-500:#767d88;
   --ink-400:#8f96a0; --ink-300:#b9bfc7;
@@ -28,7 +28,7 @@
   --shadow-sm:0 2px 8px rgba(22,27,42,.06);
   --shadow-md:0 8px 24px rgba(22,27,42,.10);
   --shadow-lg:0 20px 48px rgba(22,27,42,.16);
-  --shadow-brand:0 4px 14px rgba(225,37,27,.28);
+  --shadow-brand:0 4px 14px rgba(91,108,240,.32);
   /* 圆角 */
   --r-sm:8px; --r-md:12px; --r-lg:16px; --r-full:999px;
   /* 布局 */
@@ -526,7 +526,7 @@ input[type=range]{width:100%; accent-color:var(--brand-500); height:18px;}
 .cf-tip b{color:var(--brand-700);font-weight:600;}
 .cf-tip code{font-family:Consolas,Menlo,monospace;font-size:10px;background:var(--brand-50);color:var(--brand-700);border-radius:4px;padding:0 4px;}
 /* 演示模式详情卡 */
-#detailCard{position:absolute;width:252px;box-sizing:border-box;background:rgba(255,255,255,.97);backdrop-filter:blur(8px);border:1px solid var(--brand-200);border-radius:12px;padding:12px 14px;box-shadow:0 10px 30px rgba(22,27,42,.18),0 0 0 1px rgba(225,37,27,.12);opacity:0;transform:translateY(8px) scale(.97);transition:opacity .2s var(--ease),transform .2s var(--ease);pointer-events:none;z-index:120;color:var(--ink-900);left:0;top:0;}
+#detailCard{position:absolute;width:252px;box-sizing:border-box;background:rgba(255,255,255,.97);backdrop-filter:blur(8px);border:1px solid var(--brand-200);border-radius:12px;padding:12px 14px;box-shadow:0 10px 30px rgba(22,27,42,.18),0 0 0 1px rgba(91,108,240,.12);opacity:0;transform:translateY(8px) scale(.97);transition:opacity .2s var(--ease),transform .2s var(--ease);pointer-events:none;z-index:120;color:var(--ink-900);left:0;top:0;}
 #detailCard.show{opacity:1;transform:none;pointer-events:auto;}
 #detailCard .dc-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;border-bottom:1px solid var(--line);padding-bottom:7px;gap:8px;}
 #detailCard .dc-title{font-size:14px;font-weight:700;color:var(--ink-900);word-break:break-all;}
@@ -555,7 +555,7 @@ input[type=range]{width:100%; accent-color:var(--brand-500); height:18px;}
 #detailCard .dc-hint{position:absolute;right:12px;bottom:7px;font-size:10px;color:var(--ink-400);}
 /* 演示模式悬停高亮（切 class，不重建 DOM） */
 #shapesLayer.dim > g{opacity:.15;transition:opacity .25s var(--ease);}
-#shapesLayer.dim > g.hl{opacity:1;filter:drop-shadow(0 0 10px rgba(225,37,27,.85));}
+#shapesLayer.dim > g.hl{opacity:1;filter:drop-shadow(0 0 10px rgba(91,108,240,.85));}
 #shapesLayer.dim g.hl text{font-weight:700;}
 </style>
 <link rel="stylesheet" href="topotash-topology.css">
@@ -7266,7 +7266,7 @@ module.exports = Worker;
   <header id="toolbar">
     <!-- 品牌 -->
     <div class="tb-brand">
-      <div class="logo"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="5" r="2.2"/><circle cx="12" cy="19" r="2.6"/><path d="M7.2 7.2 16.8 5.4M5.8 8.3 11.3 17M14 17.6l4.2-10.4"/></svg></div>
+      <div class="logo"><svg width="18" height="18" viewBox="0 0 32 32" fill="none"><g transform="rotate(-4 16 16)" fill="none" stroke="currentColor" stroke-width="2.05" stroke-linecap="round"><path d="M11.5 12.5L14.9 20.2"/><path d="M13 16.2C15.6 14.8 18.6 12.6 20.2 10.8"/><circle cx="10" cy="9.5" r="3.5"/><circle cx="16" cy="23.5" r="3.5"/><circle cx="23" cy="8.8" r="3.3"/></g></svg></div>
       <div class="brand-text"><b>TopoTash</b><span class="ver">拓扑</span></div>
     </div>
     <!-- 文档名 + 未保存标记 -->
@@ -7415,7 +7415,7 @@ module.exports = Worker;
       </div>
       <div id="emptyHint">
         <div class="inner">
-          <div class="hero-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#5b6cf0" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="6" r="2.4"/><circle cx="19" cy="5" r="2.2"/><circle cx="12" cy="19" r="2.6"/><path d="M7.2 7.2 16.8 5.4M5.8 8.3 11.3 17M14 17.6l4.2-10.4"/></svg></div>
+          <div class="hero-icon"><svg width="32" height="32" viewBox="0 0 32 32" fill="none"><g transform="rotate(-4 16 16)" fill="none" stroke="#5b6cf0" stroke-width="2.05" stroke-linecap="round"><path d="M11.5 12.5L14.9 20.2"/><path d="M13 16.2C15.6 14.8 18.6 12.6 20.2 10.8"/><circle cx="10" cy="9.5" r="3.5"/><circle cx="16" cy="23.5" r="3.5"/><circle cx="23" cy="8.8" r="3.3"/></g></svg></div>
           <div class="big">从左侧拖入图形，开始绘制拓扑图</div>
           <div class="steps">
             · 点击左侧<b>图形模具</b>，再点击画布即可放置<br>
@@ -7814,8 +7814,8 @@ function restoreDraft(){
 const MASTER_DEFAULTS = { server:{w:180,h:60}, db:{w:180,h:60}, cloud:{w:180,h:60}, switch:{w:180,h:60},
   router:{w:180,h:60}, firewall:{w:180,h:60}, pc:{w:180,h:60}, laptop:{w:180,h:60}, phone:{w:180,h:60},
   printer:{w:180,h:60}, globe:{w:180,h:60}, storage:{w:180,h:60}, cluster:{w:180,h:60}, software:{w:180,h:60} };
-/* 所有设备节点初始色统一为中性石板灰, 具体颜色由属性面板自定义 */
-const MASTER_FILL = '#5b6572', MASTER_STROKE = '#5b6572';
+/* 设备节点初始色统一为品牌蓝, 具体颜色由属性面板自定义 */
+const MASTER_FILL = '#5b6cf0', MASTER_STROKE = '#5b6cf0';
 /* 卡片节点未填写名称时的兜底标题 */
 const MASTER_LABELS = { server:'服务器', db:'数据库', switch:'交换机', router:'路由器', firewall:'防火墙',
   cloud:'云', pc:'台式机', laptop:'笔记本', phone:'手机', printer:'打印机', globe:'互联网',
@@ -8273,7 +8273,7 @@ function highlightPorts(hoverId){
   if (!hoverId || !isShape(hoverId)) return;
   for (const pt of ['N','E','S','W','NW','NE','SW','SE']){
     const p=portPos(hoverId, pt);
-    overlay.appendChild(svgEl('rect',{class:'port-hl', x:p.x-4, y:p.y-4, width:8, height:8, rx:2, fill:'#fff', stroke:'#e1251b','stroke-width':1.6, style:'pointer-events:none'}));
+    overlay.appendChild(svgEl('rect',{class:'port-hl', x:p.x-4, y:p.y-4, width:8, height:8, rx:2, fill:'#fff', stroke:'#5b6cf0','stroke-width':1.6, style:'pointer-events:none'}));
   }
 }
 function syncEmptyHint(){
@@ -8372,7 +8372,7 @@ function renderOverlay(){
     const b=groupBBox(selGid);
     const selUnder = svgEl('rect',{x:b.x-1, y:b.y-1, width:b.w+2, height:b.h+2, fill:'none', stroke:'#ffffff',
       'stroke-width':3, style:'pointer-events:none', 'vector-effect':'non-scaling-stroke'});
-    const selRect = svgEl('rect',{x:b.x, y:b.y, width:b.w, height:b.h, fill:'none', stroke:'#e1251b',
+    const selRect = svgEl('rect',{x:b.x, y:b.y, width:b.w, height:b.h, fill:'none', stroke:'#5b6cf0',
       'stroke-width':1.4, 'stroke-dasharray':'4 3', style:'pointer-events:none', 'vector-effect':'non-scaling-stroke'});
     overlay.appendChild(selUnder);
     overlay.appendChild(selRect);
@@ -8381,16 +8381,16 @@ function renderOverlay(){
       const dirs=[['nw','nw-resize'],['n','n-resize'],['ne','ne-resize'],['e','e-resize'],['se','se-resize'],['s','s-resize'],['sw','sw-resize'],['w','w-resize']];
       const pos={nw:[hx[0],hy[0]], n:[hx[1],hy[0]], ne:[hx[2],hy[0]], e:[hx[2],hy[1]], se:[hx[2],hy[2]], s:[hx[1],hy[2]], sw:[hx[0],hy[2]], w:[hx[0],hy[1]]};
       dirs.forEach(([d,cursor])=>{
-        const el=svgEl('rect',{x:pos[d][0]-4.5, y:pos[d][1]-4.5, width:9, height:9, fill:'#fff', stroke:'#e1251b','stroke-width':1.6, rx:1.5, style:`pointer-events:all; cursor:${cursor}`, 'data-hd':d});
+        const el=svgEl('rect',{x:pos[d][0]-4.5, y:pos[d][1]-4.5, width:9, height:9, fill:'#fff', stroke:'#5b6cf0','stroke-width':1.6, rx:1.5, style:`pointer-events:all; cursor:${cursor}`, 'data-hd':d});
         HANDLES.push({id:selGid, kind:'resizeG', dir:d, x:pos[d][0], y:pos[d][1]});
         overlay.appendChild(el);
       });
     }
     // 旋转手柄
     const rotX=b.cx, rotY=b.y-26;
-    const line=svgEl('line',{x1:b.cx,y1:b.y, x2:rotX, y2:rotY, stroke:'#e1251b','stroke-width':1, style:'pointer-events:none'});
+    const line=svgEl('line',{x1:b.cx,y1:b.y, x2:rotX, y2:rotY, stroke:'#5b6cf0','stroke-width':1, style:'pointer-events:none'});
     overlay.appendChild(line);
-    const rot=svgEl('circle',{cx:rotX, cy:rotY, r:6.5, fill:'#fff', stroke:'#e1251b','stroke-width':1.8, style:'pointer-events:all; cursor:grab'});
+    const rot=svgEl('circle',{cx:rotX, cy:rotY, r:6.5, fill:'#fff', stroke:'#5b6cf0','stroke-width':1.8, style:'pointer-events:all; cursor:grab'});
     HANDLES.push({id:selGid, kind:'rotateG', x:rotX, y:rotY});
     overlay.appendChild(rot);
     return;
@@ -8422,7 +8422,7 @@ function renderOverlay(){
     // 双层选中描边: 白色衬底 + 品牌蓝虚线, 保证在深色/复杂图片上也清晰可见
     const selUnder = svgEl('rect',{x:b.x-1, y:b.y-1, width:b.w+2, height:b.h+2, fill:'none', stroke:'#ffffff',
       'stroke-width':3, style:'pointer-events:none', 'vector-effect':'non-scaling-stroke'});
-    const selRect = svgEl('rect',{x:b.x, y:b.y, width:b.w, height:b.h, fill:'none', stroke:'#e1251b',
+    const selRect = svgEl('rect',{x:b.x, y:b.y, width:b.w, height:b.h, fill:'none', stroke:'#5b6cf0',
       'stroke-width':1.4, 'stroke-dasharray':'4 3', style:'pointer-events:none', 'vector-effect':'non-scaling-stroke'});
     overlay.appendChild(selUnder);
     overlay.appendChild(selRect);
@@ -8434,16 +8434,16 @@ function renderOverlay(){
       const dirs=[['nw','nw-resize'],['n','n-resize'],['ne','ne-resize'],['e','e-resize'],['se','se-resize'],['s','s-resize'],['sw','sw-resize'],['w','w-resize']];
       const pos={nw:[hx[0],hy[0]], n:[hx[1],hy[0]], ne:[hx[2],hy[0]], e:[hx[2],hy[1]], se:[hx[2],hy[2]], s:[hx[1],hy[2]], sw:[hx[0],hy[2]], w:[hx[0],hy[1]]};
       dirs.forEach(([d,cursor])=>{
-        const el=svgEl('rect',{x:pos[d][0]-4.5, y:pos[d][1]-4.5, width:9, height:9, fill:'#fff', stroke:'#e1251b','stroke-width':1.6, rx:1.5, style:`pointer-events:all; cursor:${cursor}`, 'data-hd':d});
+        const el=svgEl('rect',{x:pos[d][0]-4.5, y:pos[d][1]-4.5, width:9, height:9, fill:'#fff', stroke:'#5b6cf0','stroke-width':1.6, rx:1.5, style:`pointer-events:all; cursor:${cursor}`, 'data-hd':d});
         HANDLES.push({id, kind:'resize', dir:d, x:pos[d][0], y:pos[d][1]});
         overlay.appendChild(el);
       });
     }
     // 旋转手柄
     const rotX=b.cx, rotY=b.y-26;
-    const line=svgEl('line',{x1:b.cx,y1:b.y, x2:rotX, y2:rotY, stroke:'#e1251b','stroke-width':1, style:'pointer-events:none'});
+    const line=svgEl('line',{x1:b.cx,y1:b.y, x2:rotX, y2:rotY, stroke:'#5b6cf0','stroke-width':1, style:'pointer-events:none'});
     overlay.appendChild(line);
-    const rot=svgEl('circle',{cx:rotX, cy:rotY, r:6.5, fill:'#fff', stroke:'#e1251b','stroke-width':1.8, style:'pointer-events:all; cursor:grab'});
+    const rot=svgEl('circle',{cx:rotX, cy:rotY, r:6.5, fill:'#fff', stroke:'#5b6cf0','stroke-width':1.8, style:'pointer-events:all; cursor:grab'});
     HANDLES.push({id, kind:'rotate', x:rotX, y:rotY});
     overlay.appendChild(rot);
   }
@@ -8950,7 +8950,7 @@ function moveHandler(e, m){
       p.last=m;
       const x0=p.x0,y0=p.y0, l=Math.min(x0,m.x), t=Math.min(y0,m.y), w=Math.abs(m.x-x0), h=Math.abs(m.y-y0);
       overlay.querySelectorAll('.marquee').forEach(el=>el.remove());
-      const mr=svgEl('rect',{class:'marquee', x:l, y:t, width:w, height:h, fill:'rgba(225,37,27,.10)', stroke:'#e1251b','stroke-width':1, 'stroke-dasharray':'4 3', style:'pointer-events:none'});
+      const mr=svgEl('rect',{class:'marquee', x:l, y:t, width:w, height:h, fill:'rgba(91,108,240,.10)', stroke:'#5b6cf0','stroke-width':1, 'stroke-dasharray':'4 3', style:'pointer-events:none'});
       overlay.appendChild(mr);
       // 实时高亮
       overlay.querySelectorAll('.marquee-hit').forEach(el=>el.remove());
@@ -8958,7 +8958,7 @@ function moveHandler(e, m){
         const b=itemBBox(id);
         if (b.w<0) continue;
         if (b.x < l+w && b.x+b.w > l && b.y < t+h && b.y+b.h > t){
-          const hl=svgEl('rect',{class:'marquee-hit', x:b.x, y:b.y, width:b.w, height:b.h, fill:'rgba(225,37,27,.14)', stroke:'#e1251b','stroke-width':1, 'stroke-dasharray':'3 2', style:'pointer-events:none'});
+          const hl=svgEl('rect',{class:'marquee-hit', x:b.x, y:b.y, width:b.w, height:b.h, fill:'rgba(91,108,240,.14)', stroke:'#5b6cf0','stroke-width':1, 'stroke-dasharray':'3 2', style:'pointer-events:none'});
           overlay.appendChild(hl);
         }
       }
@@ -9596,7 +9596,7 @@ function buildStencils(){
       const kind=el.dataset.kind, isConn=el.dataset.isConn==='1';
       const item = BASIC_STENCILS.concat(NET_STENCILS).find(i=>i.kind===kind) || {kind};
       const ghost=$('#ghost');
-      ghost.innerHTML=`<div style="background:#fff;border:1px solid #e1251b;border-radius:8px;padding:6px;box-shadow:0 6px 18px rgba(15,23,42,.18);">${stencilThumb(item)}</div>`;
+      ghost.innerHTML=`<div style="background:#fff;border:1px solid #5b6cf0;border-radius:8px;padding:6px;box-shadow:0 6px 18px rgba(15,23,42,.18);">${stencilThumb(item)}</div>`;
       ghost.style.display='block';
       const move=ev=>{ ghost.style.left=(ev.clientX+10)+'px'; ghost.style.top=(ev.clientY+10)+'px'; };
       move(e);
@@ -9730,7 +9730,7 @@ function renderLib(){
     d.addEventListener('pointerdown', e=>{
       e.preventDefault();
       const ghost=$('#ghost');
-      ghost.innerHTML=`<div style="background:#fff;border:1px solid #e1251b;border-radius:8px;padding:5px;box-shadow:0 6px 18px rgba(15,23,42,.18);"><img src="${f.url}" style="max-width:150px;max-height:100px;display:block;"></div>`;
+      ghost.innerHTML=`<div style="background:#fff;border:1px solid #5b6cf0;border-radius:8px;padding:5px;box-shadow:0 6px 18px rgba(15,23,42,.18);"><img src="${f.url}" style="max-width:150px;max-height:100px;display:block;"></div>`;
       ghost.style.display='block';
       const move=ev=>{ ghost.style.left=(ev.clientX+10)+'px'; ghost.style.top=(ev.clientY+10)+'px'; };
       move(e);
@@ -10030,8 +10030,8 @@ function buildPropContent(hasShape, hasConn){
     const isTextShape = s.kind==='text';
     const isMasterShape = !!MASTER_DEFAULTS[s.kind];   // 文本元素: 只显示位置与大小 + 文本, 隐藏快速样式/外观(fill 透明 stroke none 无意义)
     // 快速色板(一键换色)
-    const FILLS=isMasterShape?['#5b6572','#2563eb','#7c3aed','#0891b2','#b45309','#16a34a','#b8252e','#e1251b']:['#ffffff','#eef4ff','#e2f7ec','#fef6e2','#fdecec','#f5edff','#edf1f7','#233047'];
-    const STROKES=isMasterShape?['#5b6572','#2563eb','#7c3aed','#0891b2','#b45309','#16a34a','#b8252e','#e1251b']:['#2b7de9','#3a4657','#0f9d58','#d97a0a','#e05252','#8b5cf6','#0891b2','#94a3b8'];
+    const FILLS=isMasterShape?['#5b6cf0','#4a5ae0','#7c8df8','#38bdf8','#0f9d58','#d97a0a','#e05252','#8b5cf6']:['#ffffff','#eef4ff','#e2f7ec','#fef6e2','#fdecec','#f5edff','#edf1f7','#233047'];
+    const STROKES=isMasterShape?['#5b6cf0','#4a5ae0','#7c8df8','#38bdf8','#0f9d58','#d97a0a','#e05252','#8b5cf6']:['#2b7de9','#3a4657','#0f9d58','#d97a0a','#e05252','#8b5cf6','#0891b2','#94a3b8'];
     const swatchRow=(title,colors,prop)=>`<div class="swatch-row-title">${title}</div><div class="swatches">`
       +colors.map(c=>`<span class="swatch" data-sw="${prop}" data-color="${c}" style="background:${c}"></span>`).join('')+'</div>';
     if (!isTextShape) html+=`<div class="prop-sec"><h4>快速样式</h4>${swatchRow('填充色',FILLS,'fill')}${swatchRow('边框色',STROKES,'stroke')}</div>`;

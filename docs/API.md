@@ -736,7 +736,7 @@ DELETE /api/diagrams/<diagram_id>/nodes/<node_key>/devices/<device_id>
 → 200 { "node": { ... }, "device": { ... } }
 ```
 
-`POST` 未传 `quantity` 时默认等于设备数量。节点响应中的 `linked_devices` 会同时注入画布 `tt.devices`，供拓扑节点角标和属性面板使用；角标优先显示 `model`，无型号时显示 `name`，超过两个设备时显示 `+N`。
+`POST` 未传 `quantity` 时默认等于设备数量。节点响应中的 `linked_devices` 会同时注入画布 `tt.devices`，供拓扑节点设备卡片和属性面板使用：绑定设备的节点首行显示全部设备名称、次行显示「型号 × 数量」（多设备用「；」连接）；无绑定时退回节点文本与自定义「型号」字段。
 
 ### 设备侧关联
 

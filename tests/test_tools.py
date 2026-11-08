@@ -54,6 +54,24 @@ class SeedDemoTest(ApiTestCase):
         self.assertEqual(seed_demo(), 0)
         self.assertEqual(db.execute("SELECT COUNT(*) AS n FROM projects").fetchone()["n"], 4)
 
+    def test_seed_diagrams_use_new_card_style(self):
+        seed_demo()
+        db = get_db()
+        kinds = {
+            "server", "db", "switch", "router", "firewall", "cloud", "pc",
+            "laptop", "phone", "printer", "globe", "storage", "cluster", "software",
+        }
+        rows = db.execute("SELECT content_json FROM diagrams").fetchall()
+        self.assertEqual(len(rows), 5)
+        for row in rows:
+            content = json.loads(row["content_json"])
+            for shape in content["shapes"].values():
+                if shape.get("kind") not in kinds:
+                    continue
+                self.assertEqual((shape["w"], shape["h"]), (180, 60), shape["id"])
+                self.assertEqual(shape["stroke"], "none", shape["id"])
+                self.assertEqual(shape["fill"], "#5b6cf0", shape["id"])
+
     def test_flask_cli_commands(self):
         runner = self.app.test_cli_runner()
         result = runner.invoke(args=["init-db"])
