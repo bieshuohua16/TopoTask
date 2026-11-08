@@ -121,6 +121,7 @@
       document.title = (project.diagramName || '拓扑图') + ' · TopoTash 拓事';
       hint(`TopoTash · ${project.projectName || '未绑定项目'} · 画布自动保存`);
       booted = true;
+      if (fitAllDeviceCards()) scheduleServerSave(100);
       render();
       syncProps();
       loadTasks();
@@ -302,100 +303,32 @@
   window.render = function () {
     origRender.apply(window, arguments);
     decorateBadges();
-    decorateDeviceBadges();
+    // 设备信息已直接渲染在卡片节点内, 不再叠加悬浮设备徽标
   };
+
+  // 卡片式节点: 绑定设备后按文字排版自动加高卡片, 保证名称/型号完整显示(只增不减)
+  function fitDeviceCard(shape) {
+    if (!shape || shape.type !== 'shape') return false;
+    if (typeof MASTER_DEFAULTS === 'undefined' || !MASTER_DEFAULTS[shape.kind]) return false;
+    if (typeof cardNeedHeight !== 'function') return false;
+    const tt = shape.tt;
+    if (!tt || !Array.isArray(tt.devices) || !tt.devices.length) return false;
+    const need = cardNeedHeight(shape);
+    if (!need || shape.h >= need) return false;
+    shape.h = need;
+    return true;
+  }
+  function fitAllDeviceCards() {
+    let changed = false;
+    for (const id of Object.keys(model.shapes || {})) {
+      if (fitDeviceCard(model.shapes[id])) changed = true;
+    }
+    return changed;
+  }
 
   function deviceTotal(items) {
     return (items || []).reduce((n, item) => n + (Number(item.quantity) || 0), 0);
   }
-
-  let badgeMeasureCanvas = null;
-  function measureBadgeText(value) {
-    if (!badgeMeasureCanvas) badgeMeasureCanvas = document.createElement('canvas');
-    const context = badgeMeasureCanvas.getContext('2d');
-    context.font = '9.5px "Microsoft YaHei", sans-serif';
-    return context.measureText(String(value || '')).width;
-  }
-
-  function fitBadgeLabel(value, maxWidth) {
-    let label = String(value || '设备');
-    if (measureBadgeText(label) <= maxWidth) return label;
-    while (label.length > 1 && measureBadgeText(label + '…') > maxWidth) {
-      label = label.slice(0, -1);
-    }
-    return label + '…';
-  }
-
-  function decorateDeviceBadges() {
-    for (const id of model.order) {
-      const shape = model.shapes[id];
-      if (!shape || shape.type !== 'shape' || !shape.tt || !Array.isArray(shape.tt.devices)) continue;
-      if (!shape.tt.devices.length) continue;
-      const g = document.getElementById('shp-' + id);
-      if (!g) continue;
-
-      const devices = shape.tt.devices;
-      // Show at most two device models, then a +N marker. Full list is in the
-      // property panel and in the badge tooltip.
-      const visible = devices.slice(0, 2);
-      const maxText = Math.max(42, Math.min(96, (shape.w || 160) - 26));
-      const title = devices
-        .map(d => `${d.model || d.name || '设备'}${d.quantity ? ` ×${d.quantity}` : ''}`)
-        .join('；') + '（点击查看设备）';
-
-      // 卡片式节点: 设备徽标横向排在卡片上方, 避免遮挡图标与标题
-      let bx = 0;
-      const badgeY = shape.y - 24;
-      visible.forEach((device, index) => {
-        const label = fitBadgeLabel(device.model || device.name || '设备', maxText);
-        const width = Math.max(38, Math.ceil(measureBadgeText(label)) + 14);
-        const badge = document.createElementNS(SVGNS, 'g');
-        badge.setAttribute('class', 'tt-device-badge');
-        badge.setAttribute('data-node', id);
-        badge.setAttribute('transform', `translate(${shape.x + bx} ${badgeY})`);
-        badge.innerHTML = `<rect x="0" y="0" width="${width}" height="20" rx="7" fill="#162033" stroke="#ffffff" stroke-width="1.5"></rect>`
-          + `<text x="${width / 2}" y="13.8" text-anchor="middle" fill="#ffffff" font-size="9.5" font-family="Microsoft YaHei, sans-serif" pointer-events="none">${esc(label)}</text>`;
-        const badgeTitle = document.createElementNS(SVGNS, 'title');
-        badgeTitle.textContent = title;
-        badge.appendChild(badgeTitle);
-        g.appendChild(badge);
-        bx += width + 5;
-      });
-
-      if (devices.length > visible.length) {
-        const remaining = devices.length - visible.length;
-        const width = 34;
-        const badge = document.createElementNS(SVGNS, 'g');
-        badge.setAttribute('class', 'tt-device-badge');
-        badge.setAttribute('data-node', id);
-        badge.setAttribute('transform', `translate(${shape.x + bx} ${badgeY})`);
-        badge.innerHTML = `<rect x="0" y="0" width="${width}" height="20" rx="7" fill="#475569" stroke="#ffffff" stroke-width="1.5"></rect>`
-          + `<text x="${width / 2}" y="13.8" text-anchor="middle" fill="#ffffff" font-size="9.5" font-family="Microsoft YaHei, sans-serif" pointer-events="none">+${remaining}</text>`;
-        const badgeTitle = document.createElementNS(SVGNS, 'title');
-        badgeTitle.textContent = title;
-        badge.appendChild(badgeTitle);
-        g.appendChild(badge);
-      }
-    }
-  }
-
-  // Clicking a device badge selects the node and focuses the device section.
-  document.getElementById('shapesLayer').addEventListener('click', function (e) {
-    const badge = e.target && e.target.closest ? e.target.closest('.tt-device-badge') : null;
-    if (!badge) return;
-    e.stopPropagation();
-    e.preventDefault();
-    const id = badge.getAttribute('data-node');
-    if (model.shapes[id]) {
-      selectNode(id);
-      setTimeout(() => {
-        const sec = document.querySelector('.tt-device-sec');
-        if (!sec) return;
-        sec.classList.add('tt-device-flash');
-        setTimeout(() => sec.classList.remove('tt-device-flash'), 1200);
-      }, 60);
-    }
-  }, true);
 
   // Clicking a badge jumps to its task, or selects the node for linking.
   document.getElementById('shapesLayer').addEventListener('click', function (e) {
@@ -595,6 +528,7 @@
     const defaultName = rawName.replace(/\s*[×xX]\s*\d+\s*$/, '');
     const qtyMatch = rawName.match(/[×xX]\s*(\d+)\s*$/);
     const defaultQty = qtyMatch ? Math.max(1, Number(qtyMatch[1])) : 1;
+    const defaultModel = (linked[0] && linked[0].model) || '';
 
     const sec = document.createElement('div');
     sec.className = 'prop-sec tt-device-sec';
@@ -624,6 +558,7 @@
           ${templateOptions}
         </select>
         <input data-device-name value="${esc(defaultName)}" maxlength="120">
+        <input data-device-model value="${esc(defaultModel)}" placeholder="型号（如 SR650 / S5735-X）" maxlength="120">
         <div class="tt-device-create-row">
           <select data-device-category>${categories}</select>
           <input data-device-qty type="number" min="1" step="1" value="${defaultQty}" title="本节点数量">
@@ -651,6 +586,8 @@
       if (!template) return;
       const nameInput = sec.querySelector('[data-device-name]');
       if (nameInput) nameInput.value = template.name || template.display_label || '';
+      const modelInput = sec.querySelector('[data-device-model]');
+      if (modelInput) modelInput.value = template.model || '';
       const categorySelect = sec.querySelector('[data-device-category]');
       if (categorySelect) categorySelect.value = template.category || 'other';
     };
@@ -659,11 +596,14 @@
       const name = (nameInput && nameInput.value.trim()) || defaultName;
       const category = sec.querySelector('[data-device-category]').value;
       const quantity = Math.max(1, Number(sec.querySelector('[data-device-qty]').value || 1));
+      const modelInput = sec.querySelector('[data-device-model]');
+      const model = modelInput ? modelInput.value.trim() : '';
       const template = deviceTemplates.find(item => item.id === (templateSelect && templateSelect.value));
       const create = { name, category, quantity };
+      if (model) create.model = model;
       if (template) {
         create.brand = template.brand || '';
-        create.model = template.model || '';
+        if (!create.model) create.model = template.model || '';
         create.spec = template.spec || '';
         create.unit = template.unit || '台';
         create.unit_price = template.unit_price == null ? null : template.unit_price;
@@ -690,6 +630,7 @@
         status_label: d.status_label, quantity: d.quantity, unit: d.unit
       }))
     };
+    fitDeviceCard(shape);
   }
 
   async function nodeAction(body) {

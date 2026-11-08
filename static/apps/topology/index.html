@@ -7382,6 +7382,7 @@ module.exports = Worker;
         <div id="stencilBody">
           <div class="sec-title">基础图形</div>
           <div class="stencil-grid" id="stencilBasic"></div>
+          <div class="sec-title">网络设备</div>
           <div class="stencil-grid" id="stencilNet"></div>
         </div>
         <div id="libBody" style="display:none;">
@@ -7810,9 +7811,9 @@ function restoreDraft(){
 }
 
 /* ================= 形状创建 ================= */
-const MASTER_DEFAULTS = { server:{w:160,h:56}, db:{w:160,h:56}, cloud:{w:160,h:56}, switch:{w:160,h:56},
-  router:{w:160,h:56}, firewall:{w:160,h:56}, pc:{w:160,h:56}, laptop:{w:160,h:56}, phone:{w:160,h:56},
-  printer:{w:160,h:56}, globe:{w:160,h:56}, storage:{w:160,h:56}, cluster:{w:160,h:56}, software:{w:160,h:56} };
+const MASTER_DEFAULTS = { server:{w:180,h:60}, db:{w:180,h:60}, cloud:{w:180,h:60}, switch:{w:180,h:60},
+  router:{w:180,h:60}, firewall:{w:180,h:60}, pc:{w:180,h:60}, laptop:{w:180,h:60}, phone:{w:180,h:60},
+  printer:{w:180,h:60}, globe:{w:180,h:60}, storage:{w:180,h:60}, cluster:{w:180,h:60}, software:{w:180,h:60} };
 /* 所有设备节点初始色统一为中性石板灰, 具体颜色由属性面板自定义 */
 const MASTER_FILL = '#5b6572', MASTER_STROKE = '#5b6572';
 /* 卡片节点未填写名称时的兜底标题 */
@@ -7973,6 +7974,7 @@ const MASTER_NET_GLYPHS = {
   globe: '<g xmlns="http://www.w3.org/2000/svg" id="Background"> <path d="M150.036,50.036C205.228,50.036 250.036,94.845 250.036,150.036C250.036,205.228 205.228,250.036 150.036,250.036C94.845,250.036 50.036,205.228 50.036,150.036C50.036,94.845 94.845,50.036 150.036,50.036ZM155.189,234.882C163.475,224.618 170.292,213.117 175.317,200.702C167,200.035 158.564,199.694 150.036,199.694C141.479,199.694 133.015,200.037 124.662,200.71C129.695,213.119 136.518,224.615 144.813,234.878C146.54,234.983 148.282,235.036 150.036,235.036C151.768,235.036 153.487,234.985 155.189,234.882ZM213.791,206.23C206.151,204.633 198.383,203.316 190.502,202.294C186.74,212.399 181.919,221.991 176.172,230.936C190.862,226.188 203.809,217.546 213.791,206.23ZM123.799,230.903C118.058,221.973 113.239,212.396 109.476,202.306C101.627,203.327 93.891,204.639 86.282,206.23C96.241,217.519 109.15,226.147 123.799,230.903ZM65.355,157.44C66.489,170.546 70.601,182.804 77.013,193.54C86.192,191.459 95.553,189.762 105.071,188.469C102.425,178.494 100.782,168.114 100.256,157.44L65.355,157.44ZM234.717,157.44L199.693,157.44C199.173,168.106 197.537,178.482 194.898,188.455C204.452,189.75 213.849,191.452 223.06,193.539C229.471,182.808 233.585,170.547 234.717,157.44ZM184.944,157.44L115.006,157.44C115.558,167.557 117.225,177.382 119.888,186.796C129.782,185.904 139.847,185.445 150.036,185.445C160.179,185.445 170.198,185.9 180.081,186.787C182.736,177.375 184.397,167.555 184.944,157.44ZM222.944,106.34C213.75,108.42 204.375,110.116 194.841,111.407C197.502,121.402 199.155,131.799 199.686,142.487L234.705,142.487C233.548,129.356 229.399,117.078 222.944,106.34ZM77.129,106.341C70.675,117.078 66.526,129.355 65.368,142.487L100.256,142.487C100.783,131.79 102.432,121.385 105.09,111.388C95.606,110.1 86.277,108.411 77.129,106.341ZM184.936,142.487C184.377,132.343 182.698,122.497 180.021,113.072C170.167,113.956 160.164,114.409 150.036,114.409C139.862,114.409 129.813,113.952 119.908,113.059C117.235,122.49 115.56,132.34 115.006,142.487L184.936,142.487ZM155.188,65.191C153.487,65.088 151.768,65.036 150.036,65.036C148.24,65.036 146.456,65.092 144.688,65.203C136.468,75.403 129.697,86.822 124.69,99.147C133.044,99.818 141.494,100.16 150.036,100.16C158.535,100.16 166.941,99.822 175.231,99.159C170.213,86.826 163.427,75.399 155.188,65.191ZM176.173,69.137C181.878,78.017 186.673,87.539 190.424,97.57C198.276,96.554 206.016,95.245 213.628,93.658C203.668,82.433 190.783,73.86 176.173,69.137ZM123.68,69.209C109.16,73.947 96.354,82.492 86.445,93.658C94.012,95.236 101.701,96.537 109.502,97.551C113.235,87.556 118.005,78.065 123.68,69.209Z" fill="inherit"/> </g>',
   storage: '<g xmlns="http://www.w3.org/2000/svg"> <g transform="matrix(0.905405,0,0,0.905405,34.6391,34.9388)"> <path d="M187.606,237.115L67.221,237.115C60.387,237.115 54.839,231.567 54.839,224.734L54.839,29.431C54.839,22.598 60.387,17.05 67.221,17.05L187.606,17.05C194.44,17.05 199.988,22.598 199.988,29.431L199.988,224.734C199.988,231.567 194.441,237.115 187.606,237.115ZM171.533,192.226L83.294,192.226C76.27,192.226 70.567,197.929 70.567,204.953C70.567,211.978 76.27,217.681 83.294,217.681L171.533,217.681C178.557,217.681 184.26,211.978 184.26,204.953C184.26,197.929 178.558,192.226 171.533,192.226ZM84.24,198.95C87.553,198.95 90.243,201.64 90.243,204.953C90.243,208.267 87.553,210.957 84.24,210.957C80.927,210.957 78.237,208.267 78.237,204.953C78.237,201.64 80.927,198.95 84.24,198.95ZM171.533,153.406L83.294,153.406C76.269,153.406 70.567,159.109 70.567,166.133C70.567,173.158 76.27,178.861 83.294,178.861L171.533,178.861C178.557,178.861 184.26,173.158 184.26,166.133C184.26,159.109 178.558,153.406 171.533,153.406ZM84.24,160.13C87.553,160.13 90.243,162.82 90.243,166.133C90.243,169.447 87.553,172.137 84.24,172.137C80.927,172.137 78.237,169.447 78.237,166.133C78.237,162.82 80.927,160.13 84.24,160.13ZM171.533,114.686L83.294,114.686C76.269,114.686 70.567,120.389 70.567,127.414C70.567,134.438 76.27,140.141 83.294,140.141L171.533,140.141C178.557,140.141 184.26,134.438 184.26,127.414C184.26,120.389 178.558,114.686 171.533,114.686ZM84.24,121.41C87.553,121.41 90.243,124.1 90.243,127.414C90.243,130.727 87.553,133.417 84.24,133.417C80.927,133.417 78.237,130.727 78.237,127.414C78.237,124.1 80.927,121.41 84.24,121.41ZM171.533,75.85L83.294,75.85C76.269,75.851 70.567,81.553 70.567,88.578C70.567,95.602 76.27,101.305 83.294,101.305L171.533,101.305C178.557,101.305 184.26,95.602 184.26,88.578C184.26,81.553 178.558,75.851 171.533,75.85ZM84.24,82.574C87.553,82.574 90.243,85.264 90.243,88.578C90.243,91.891 87.553,94.581 84.24,94.581C80.927,94.581 78.237,91.891 78.237,88.578C78.237,85.264 80.927,82.574 84.24,82.574ZM171.533,37.365L83.294,37.365C76.269,37.365 70.567,43.068 70.567,50.092C70.567,57.117 76.27,62.82 83.294,62.82L171.533,62.82C178.557,62.82 184.26,57.117 184.26,50.092C184.26,43.068 178.558,37.365 171.533,37.365ZM84.24,44.089C87.553,44.089 90.243,46.779 90.243,50.092C90.243,53.405 87.553,56.095 84.24,56.095C80.927,56.095 78.237,53.405 78.237,50.092C78.237,46.779 80.927,44.089 84.24,44.089Z" fill="inherit"/> </g> </g>',
   software: '<g xmlns="http://www.w3.org/2000/svg"> <g> <rect x="56" y="62" width="188" height="176" rx="18" fill="none" stroke="inherit" stroke-width="13"/> <path d="M56,112 L244,112" fill="none" stroke="inherit" stroke-width="12"/> <circle cx="82" cy="87" r="7" fill="inherit"/> <circle cx="106" cy="87" r="7" fill="inherit"/> <circle cx="130" cy="87" r="7" fill="inherit"/> <path d="M124,152 L102,178 L124,204 M176,152 L198,178 L176,204 M166,144 L134,212" fill="none" stroke="inherit" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/> </g> </g>',
+  cluster: '<g xmlns="http://www.w3.org/2000/svg"> <g> <rect x="64" y="66" width="172" height="50" rx="10" fill="none" stroke="inherit" stroke-width="13"/> <rect x="64" y="125" width="172" height="50" rx="10" fill="none" stroke="inherit" stroke-width="13"/> <rect x="64" y="184" width="172" height="50" rx="10" fill="none" stroke="inherit" stroke-width="13"/> <circle cx="94" cy="91" r="7" fill="inherit"/> <circle cx="94" cy="150" r="7" fill="inherit"/> <circle cx="94" cy="209" r="7" fill="inherit"/> <path d="M124,91 L206,91 M124,150 L206,150 M124,209 L206,209" fill="none" stroke="inherit" stroke-width="12" stroke-linecap="round"/> </g> </g>',
 };
 function svgEl(tag, attrs){
   const el = document.createElementNS(SVGNS, tag);
@@ -8003,6 +8005,100 @@ function cardSubtitle(s){
   const f = (s.fields || []).find(x => x && /^(型号|规格|model)$/i.test(String(x.k || '').trim()));
   if (f && f.v) return String(f.v);
   return '';
+}
+
+// 卡片文字排版工具: 中文/全角按 1em、ASCII 按 0.56em 估算宽度, 用于折行与高度计算
+function cardCharW(ch){ return /[\x00-\xff]/.test(ch) ? 0.56 : 1; }
+function cardTextWidth(t, fs){ let w = 0; for (const ch of String(t)) w += cardCharW(ch) * fs; return w; }
+function cardCharWrap(t, fs, maxW){
+  const lines = []; let cur = '';
+  for (const ch of String(t)){
+    if (!cur && ch === ' ') continue;
+    const next = cur + ch;
+    if (cur && cardTextWidth(next, fs) > maxW){ lines.push(cur); cur = ch === ' ' ? '' : ch; }
+    else cur = next;
+  }
+  if (cur) lines.push(cur);
+  return lines.length ? lines : [''];
+}
+// 折行优先按「；」分隔的设备边界断开, 避免把设备名拆散; 单个名称过长时才逐字折行
+function cardWrap(t, fs, maxW){
+  const units = String(t).split('；');
+  const lines = []; let cur = '';
+  for (const u of units){
+    if (cur && cardTextWidth(cur + '；' + u, fs) > maxW){ lines.push(cur); cur = ''; }
+    if (cardTextWidth(u, fs) > maxW){
+      const segs = cardCharWrap(u, fs, maxW);
+      lines.push(...segs.slice(0, -1));
+      cur = segs[segs.length - 1];
+    } else {
+      cur = cur ? cur + '；' + u : u;
+    }
+  }
+  if (cur) lines.push(cur);
+  return lines.length ? lines : [''];
+}
+// 卡片文字内容: 绑定设备时 上行=全部设备名称、下行=全部型号×数量(用「；」连接); 未绑定=自定义文本/类型名
+function cardTextContent(s){
+  const devices = (s.tt && Array.isArray(s.tt.devices)) ? s.tt.devices : [];
+  if (devices.length){
+    const title = devices.map(d => String((d && d.name) || '设备')).join('；');
+    const sub = devices.map(d => {
+      const bits = [];
+      if (d && d.model) bits.push(String(d.model));
+      if (d && d.quantity) bits.push('×' + d.quantity);
+      return bits.join(' ');
+    }).filter(Boolean).join('；');
+    return { title, sub };
+  }
+  return {
+    title: s.text ? String(s.text).split('\n')[0] : (MASTER_LABELS[s.kind] || ''),
+    sub: cardSubtitle(s)
+  };
+}
+// 卡片几何: 内边距、图标位置、文字起点与可用宽度
+function cardGeom(s){
+  const pad = Math.max(5, Math.min(9, s.h*0.14));
+  const square = (s.w - s.h) < 24;
+  const ico = square ? Math.max(18, Math.min(52, Math.min(s.w, s.h)*0.44))
+                     : Math.max(18, Math.min(40, Math.min(s.h - pad*2, s.h*0.55)));
+  const icoX = square ? (s.w - ico)/2 : pad;
+  const icoY = square ? s.h*0.12 : (s.h - ico)/2;
+  const tx = square ? s.w/2 : pad + ico + Math.max(6, Math.round(pad*0.9));
+  const maxW = square ? s.w - 10 : Math.max(14, s.w - tx - pad);
+  return { pad, square, ico, icoX, icoY, tx, maxW };
+}
+// 卡片文字排版(字号随高度不足自动缩小)
+function cardLayout(s){
+  const g = cardGeom(s);
+  const { title, sub } = cardTextContent(s);
+  const availH = Math.max(12, s.h - g.pad*2);
+  let fs1 = 12.5, fs2 = 10, tl = [], sl = [], lh1 = 0, lh2 = 0, blockH = 0;
+  for (let i = 0; i < 10; i++){
+    lh1 = fs1*1.32; lh2 = fs2*1.42;
+    tl = title ? cardWrap(title, fs1, g.maxW) : [];
+    sl = sub ? cardWrap(sub, fs2, g.maxW) : [];
+    if (g.square){ // 旧文档正方形节点: 文字在图标下方, 每段仅保留一行
+      if (tl.length > 1) tl = [tl[0].slice(0, -1) + '…'];
+      if (sl.length > 1) sl = [sl[0].slice(0, -1) + '…'];
+    }
+    blockH = tl.length*lh1 + sl.length*lh2;
+    if (blockH <= availH + 0.5 || fs1 <= 8.5) break;
+    fs1 = Math.max(8.5, fs1 - 1);
+    fs2 = Math.max(6.8, fs1*0.8);
+  }
+  const color = escHtml(s.textColor || '#1a1c1f');
+  return { ...g, title, sub, fs1, fs2, lh1, lh2, blockH, titleLines: tl, subLines: sl, color };
+}
+// 不缩字号排版所需的最小卡片高度(供 bridge 自动加高卡片)
+function cardNeedHeight(s){
+  const g = cardGeom(s);
+  const { title, sub } = cardTextContent(s);
+  const fs1 = 12.5, fs2 = 10;
+  const tl = title ? cardWrap(title, fs1, g.maxW) : [];
+  const sl = sub ? cardWrap(sub, fs2, g.maxW) : [];
+  if (g.square) return 0;
+  return Math.max(24, Math.ceil(g.pad*2 + tl.length*fs1*1.32 + sl.length*fs2*1.42 + 2));
 }
 
 function shapeInner(s){
@@ -8064,32 +8160,20 @@ function shapeInner(s){
       const cardStroke = border==='none' ? '#e2e5e9' : escHtml(border);
       const cardSW = border==='none' ? 1 : sw;
       inner = `<rect x="0" y="0" width="${s.w}" height="${s.h}" rx="${r}" fill="#ffffff" stroke="${cardStroke}" stroke-width="${cardSW}"${dashAttr} style="opacity:${s.opacity}"/>`;
-      const pad = Math.max(5, Math.min(9, s.h*0.14));
-      const square = (s.w - s.h) < 24;   // 旧文档的正方形节点: 图标在上、文字在下
-      const ico = square ? Math.max(18, Math.min(52, Math.min(s.w, s.h)*0.44))
-                         : Math.max(18, Math.min(40, Math.min(s.h - pad*2, s.h*0.55)));
+      const lay = cardLayout(s);
       const art = masterArt(s.kind, ms).split('inherit').join(escHtml(iconColor));
-      const icoX = square ? (s.w - ico)/2 : pad;
-      const icoY = square ? s.h*0.12 : (s.h-ico)/2;
-      inner += `<svg x="${icoX}" y="${icoY}" width="${ico}" height="${ico}" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" style="opacity:${s.opacity}">${art}</svg>`;
-      const title = s.text ? String(s.text).split('\n')[0] : (MASTER_LABELS[s.kind] || '');
-      const sub = cardSubtitle(s);
-      const tx = square ? s.w/2 : pad + ico + Math.max(6, Math.round(pad*0.9));
-      const maxW = square ? s.w - 10 : Math.max(14, s.w - tx - pad);
-      const anchor = square ? 'middle' : 'start';
-      const hasSub = !!sub && s.h >= 34 && maxW >= 26;
-      const fs1 = hasSub ? Math.min(13, Math.max(9, s.h*0.26)) : Math.min(14, Math.max(9, s.h*0.34));
-      const fs2 = Math.max(8, fs1*0.78);
-      const cut = (t, f) => {
-        const lim = Math.max(2, Math.floor(maxW / (f*0.95)));
-        return t.length>lim ? t.slice(0, lim-1)+'…' : t;
-      };
+      inner += `<svg x="${lay.icoX}" y="${lay.icoY}" width="${lay.ico}" height="${lay.ico}" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" style="opacity:${s.opacity}">${art}</svg>`;
+      // 文字: 上行粗体(设备名称/类型名, 多设备用「；」连接), 下行小字(型号×数量, 多设备用「；」连接)
       const fam = escHtml(s.fontFamily);
-      if (title){
-        const ty1 = square ? s.h*0.70 : (hasSub ? s.h/2 - fs1*0.45 : s.h/2);
-        inner += `<text x="${tx}" y="${ty1}" text-anchor="${anchor}" dominant-baseline="central" font-size="${fs1}" font-family="${fam}" font-weight="600" fill="${escHtml(s.textColor||'#1a1c1f')}" style="pointer-events:none;opacity:${s.opacity}">${escHtml(cut(title,fs1))}</text>`;
-        if (hasSub) inner += `<text x="${tx}" y="${square ? s.h*0.86 : s.h/2 + fs2*0.85}" text-anchor="${anchor}" dominant-baseline="central" font-size="${fs2}" font-family="${fam}" font-weight="400" fill="#767d88" style="pointer-events:none;opacity:${s.opacity}">${escHtml(cut(sub,fs2))}</text>`;
-      }
+      const anchor = lay.square ? 'middle' : 'start';
+      const y0 = lay.square ? Math.min(s.h*0.62, s.h - lay.blockH - 3) : (s.h - lay.blockH)/2;
+      lay.titleLines.forEach((line, i) => {
+        inner += `<text x="${lay.tx}" y="${y0 + lay.lh1*(i + 0.5)}" text-anchor="${anchor}" dominant-baseline="central" font-size="${lay.fs1}" font-family="${fam}" font-weight="600" fill="${lay.color}" style="pointer-events:none;opacity:${s.opacity}">${escHtml(line)}</text>`;
+      });
+      const subTop = y0 + lay.titleLines.length*lay.lh1;
+      lay.subLines.forEach((line, i) => {
+        inner += `<text x="${lay.tx}" y="${subTop + lay.lh2*(i + 0.5)}" text-anchor="${anchor}" dominant-baseline="central" font-size="${lay.fs2}" font-family="${fam}" font-weight="400" fill="#767d88" style="pointer-events:none;opacity:${s.opacity}">${escHtml(line)}</text>`;
+      });
       carded = true;
     }
   }
