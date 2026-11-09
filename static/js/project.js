@@ -84,11 +84,16 @@
 
     const dBox = document.getElementById('overviewDiagrams');
     const list = (p.diagrams || []).slice(0, 4);
-    dBox.innerHTML = list.length ? list.map(d => `
+    dBox.innerHTML = list.length ? list.map(d => {
+      const thumb = window.TTDiagramThumbs
+        ? window.TTDiagramThumbs.forKind(d.kind)
+        : TT.icon.diagram;
+      return `
       <div class="mini-diagram" data-id="${d.id}">
-        <div class="md-thumb">${TT.icon.diagram}</div>
+        <div class="md-thumb">${thumb}</div>
         <b>${TT.esc(d.name)}</b><span>${d.node_count || 0} 节点 · ${TT.relative(d.updated_at)}</span>
-      </div>`).join('') : TT.empty('还没有拓扑图');
+      </div>`;
+    }).join('') : TT.empty('还没有拓扑图');
     dBox.querySelectorAll('.mini-diagram').forEach(el => {
       el.onclick = () => { location.href = `/projects/${PROJECT_ID}/diagrams/${el.dataset.id}`; };
     });
