@@ -492,6 +492,7 @@ CSV 由服务端解析，支持 UTF-8/BOM/GBK、中文类别；预览返回 `new
 
 - 读工具：`list_projects / get_project / portfolio_summary / list_tasks / get_task / search`。
 - 写工具：`create_project / update_project / delete_project / create_task / update_task / delete_task`。
+- 补任务走「对话 + 表单」：先查询项目和现有任务，追问任务目标、交付物与截止时间，再生成单个 `create_task` 草稿；同一轮只允许一个任务草稿，避免批量生成不贴合项目的任务。
 - 草稿卡片支持改字段；`delete_*` 显示不可恢复警告；同一草稿只能应用一次（重复确认返回 409）。
 - 修改草稿保存生成时字段快照，仅写入实际变化；目标字段被手动修改时返回 409，保留待确认状态。缺少快照的旧修改草稿需要重新生成。
 - 项目 + 起始任务在同一个 SQLite 事务里提交；删除任务复用 `delete_task_record`，节点角标同步清理。

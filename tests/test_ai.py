@@ -184,6 +184,24 @@ class AITestCase(unittest.TestCase):
         self.assertTrue(data["ok"])
         self.assertTrue(any(m["role"] == "tool" for m in data["messages"]))
 
+    def test_second_task_draft_is_blocked_in_one_turn(self):
+        from services_ai import run_chat
+
+        project = self.client.post(
+            "/api/projects", json={"name": "补任务项目", "stage": "research"}
+        ).get_json()
+        cases = [
+            tool_call("create_task", {"project_ref": project["id"], "title": "任务 A"}),
+            tool_call("create_task", {"project_ref": project["id"], "title": "任务 B"}),
+            text_reply("已生成一个任务草稿，请先确认。"),
+        ]
+        with mock.patch("services_ai.chat_completion", side_effect=cases):
+            result = run_chat(None, "为当前项目补充两个任务", {"project_id": project["id"]})
+        self.assertEqual(len(result["actions"]), 1)
+        self.assertEqual(result["actions"][0]["values"]["title"], "任务 A")
+        tool_texts = [m.get("content", "") for m in result["messages"] if m["role"] == "tool"]
+        self.assertTrue(any("本轮已经生成一个任务草稿" in text for text in tool_texts))
+
     def test_create_project_through_http_and_confirm(self):
         cases = [
             tool_call("create_project", {"name": "HTTP 项目", "customer": "客户 A"}),
