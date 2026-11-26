@@ -85,6 +85,51 @@ class TopologyAITest(ApiTestCase):
         self.assertEqual(json.loads(call.call_args.args[0].data)["model"], "legacy-model")
         self.assertEqual(self.get_json("/api/ai/config")["model"], "legacy-model")
 
+    def test_multimodal_user_message_is_forwarded(self):
+        self.configure()
+        image = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"
+        messages = [
+            {"role": "system", "content": "Return JSON"},
+            {"role": "user", "content": [
+                {"type": "text", "text": "Recognize this topology photo"},
+                {"type": "image_url", "image_url": {"url": image}},
+            ]},
+        ]
+        with mock.patch("services_ai.urllib.request.urlopen", return_value=io.BytesIO(b"data: [DONE]\n\n")) as call:
+            response = self.client.post("/api/ai/topology", json={"messages": messages})
+            response.get_data()
+        self.assertEqual(response.status_code, 200)
+        body = json.loads(call.call_args.args[0].data)
+        self.assertEqual(body["messages"], messages)
+
+    def test_invalid_multimodal_messages_do_not_contact_model(self):
+        self.configure()
+        system = {"role": "system", "content": "Return JSON"}
+        image = {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}}
+        cases = [
+            ("invalid_messages", [system, {"role": "assistant", "content": [image]}]),
+            ("invalid_messages", [system, {"role": "user", "content": []}]),
+            ("invalid_messages", [system, {"role": "user", "content": [{"type": "audio"}]}]),
+            ("invalid_messages", [system, {"role": "user", "content": [{"type": "text", "text": " "}]}]),
+            ("invalid_image", [system, {"role": "user", "content": [
+                {"type": "image_url", "image_url": {"url": "https://example.com/a.png"}}
+            ]}]),
+            ("too_many_images", [system, {"role": "user", "content": [image, image, image]}]),
+        ]
+        with mock.patch("services_ai.urllib.request.urlopen") as call:
+            for code, messages in cases:
+                with self.subTest(code=code):
+                    response = self.client.post("/api/ai/topology", json={"messages": messages})
+                    self.assertEqual(response.status_code, 400)
+                    self.assertEqual(response.get_json()["error"]["code"], code)
+            with mock.patch("services_ai.TOPOLOGY_MAX_IMAGE_CHARS", 10):
+                response = self.client.post("/api/ai/topology", json={"messages": [
+                    system, {"role": "user", "content": [image]}
+                ]})
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(response.get_json()["error"]["code"], "image_too_large")
+            call.assert_not_called()
+
     def test_provider_failure_returns_api_error_before_stream_starts(self):
         self.configure()
         for exception, status, code in (

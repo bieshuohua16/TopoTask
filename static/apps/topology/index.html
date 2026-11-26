@@ -388,6 +388,17 @@ input[type=range]{width:100%; accent-color:var(--brand-500); height:18px;}
 #aiQuickTips button:hover{background:var(--brand-50);}
 #aiQuickTips #aiClearChat{margin-left:auto; color:var(--ink-400); border-color:var(--line);}
 #aiQuickTips #aiClearChat:hover{color:var(--red); border-color:#f5c2c2; background:var(--red-soft);}
+#aiQuickTips #aiAttachBtn{color:var(--brand-600); border-style:dashed;}
+#aiQuickTips #aiAttachBtn:hover{background:var(--brand-50);}
+#aiAttachPreview{display:none; gap:7px; flex-wrap:wrap; margin-bottom:8px;}
+#aiAttachPreview.show{display:flex;}
+.ai-attach-item{position:relative; width:52px; height:52px; border:1px solid var(--line); border-radius:8px; overflow:hidden; background:#fff; box-shadow:var(--shadow-sm);}
+.ai-attach-item img{width:100%; height:100%; object-fit:cover; display:block;}
+.ai-attach-item button{position:absolute; top:2px; right:2px; width:16px; height:16px; padding:0; border:none; border-radius:50%; background:rgba(15,23,42,.72); color:#fff; font-size:12px; line-height:16px; cursor:pointer;}
+.ai-attach-item button:hover{background:var(--red);}
+.ai-msg .ai-msg-images{display:flex; gap:6px; flex-wrap:wrap; margin-top:7px;}
+.ai-msg .ai-msg-images img{max-width:120px; max-height:86px; border-radius:7px; border:1px solid rgba(255,255,255,.5); display:block; object-fit:cover;}
+.ai-msg.bot .ai-msg-images img{border-color:var(--line);}
 #aiInputRow{display:flex; gap:7px; align-items:flex-end;}
 #aiInput{flex:1; min-height:56px; max-height:120px; resize:vertical; border:1px solid var(--line); border-radius:10px; padding:8px 10px;
   font-size:12px; line-height:1.5; font-family:inherit; color:var(--ink-900); background:#fff; outline:none; user-select:text; transition:border-color .15s, box-shadow .15s;}
@@ -7456,13 +7467,16 @@ module.exports = Worker;
               <button data-tip-text="画一个办公网：核心交换机下面接两台接入交换机，各连三台电脑" title="点击填入输入框（可修改后发送）：画一个办公网：核心交换机下面接两台接入交换机，各连三台电脑">办公网</button>
               <button data-tip-text="画一个数据中心：核心交换机下接数据库、应用服务器、备份服务器" title="点击填入输入框（可修改后发送）：画一个数据中心：核心交换机下接数据库、应用服务器、备份服务器">数据中心</button>
               <button data-tip-text="画：外网 -> 防火墙 -> 核心路由器，路由器接两台服务器" title="点击填入输入框（可修改后发送）：画：外网 -> 防火墙 -> 核心路由器，路由器接两台服务器">外网接入</button>
+              <button id="aiAttachBtn" title="添加拓扑照片/截图（也可直接在输入框粘贴，最多 2 张）">+ 图片</button>
               <button id="aiClearChat" title="清空对话记录">清空对话</button>
             </div>
+            <div id="aiAttachPreview"></div>
             <div id="aiInputRow">
-              <textarea id="aiInput" placeholder="用一句话描述网络拓扑，如：画一个办公网，核心交换机下面接两台交换机，各连三台电脑…"></textarea>
+              <textarea id="aiInput" placeholder="描述拓扑，或直接粘贴拓扑照片/截图…"></textarea>
               <button id="aiSend" title="发送 (Enter 发送 / Shift+Enter 换行)"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></svg></button>
             </div>
-            <div id="aiHint">点击上方模板按钮可将示例提示词填入输入框（可修改后发送）。AI 会识别设备素材与素材库图片（需先在「素材库」选择文件夹）。<span id="elkStatus" style="display:inline-block;margin-left:4px;font-size:10px;padding:1px 5px;border-radius:3px;background:var(--brand-50);color:var(--brand-600);">布局引擎加载中...</span><span class="link" id="aiOpenSettings">全局 AI 设置</span></div>
+            <input type="file" id="aiImageInput" accept="image/*" multiple style="display:none">
+            <div id="aiHint">直接粘贴拓扑照片/截图（最多 2 张），AI 会先识别设备与连线再生成预览；也可点「+ 图片」。<span id="elkStatus" style="display:inline-block;margin-left:4px;font-size:10px;padding:1px 5px;border-radius:3px;background:var(--brand-50);color:var(--brand-600);">布局引擎加载中...</span><span class="link" id="aiOpenSettings">全局 AI 设置</span></div>
           </div>
         </div>
       </div>
@@ -7482,6 +7496,7 @@ module.exports = Worker;
         <button id="setSave">保存</button>
       </div>
       <div id="setStatus"></div>
+      <div id="aiPrivacy">粘贴的拓扑照片/截图会随消息发送给你配置的模型服务；API Key 只保存在本机，不会进入浏览器。</div>
     </div>
   </div>
 
@@ -11335,8 +11350,103 @@ const AI = {
   history: [],          // 对话历史 [{role, content}]
   busy: false,
   pendingConfirm: false,   // 有 AI 生成结果待确认时禁止再次发送
+  attachments: [],         // 待发送的拓扑照片/截图 [{id,dataUrl,name,w,h}]
 };
+const AI_MAX_IMAGES = 2;
+const AI_IMAGE_MAX_DIM = 1800;
 const AI_KIND_WHITELIST = new Set(['router','switch','firewall','server','db','cloud','pc','laptop','phone','printer','globe','storage','cluster','software','rect','roundRect','ellipse','diamond','text','image']);
+
+/* ---- 多模态图片附件 ---- */
+function aiImageFileToData(file){
+  return new Promise((resolve, reject)=>{
+    if (!file || !file.type || !file.type.startsWith('image/')) {
+      reject(new Error('不是图片文件')); return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      reject(new Error('图片超过 20MB，请先压缩')); return;
+    }
+    const reader = new FileReader();
+    reader.onerror = ()=>reject(new Error('读取图片失败'));
+    reader.onload = ()=>{
+      const img = new Image();
+      img.onerror = ()=>reject(new Error('无法解析图片'));
+      img.onload = ()=>{
+        try{
+          const iw = img.width || AI_IMAGE_MAX_DIM;
+          const ih = img.height || AI_IMAGE_MAX_DIM;
+          const scale = Math.min(1, AI_IMAGE_MAX_DIM / Math.max(iw, ih));
+          const w = Math.max(1, Math.round(iw * scale));
+          const h = Math.max(1, Math.round(ih * scale));
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+          let dataUrl = canvas.toDataURL('image/jpeg', 0.86);
+          if (dataUrl.length > 5_000_000) dataUrl = canvas.toDataURL('image/jpeg', 0.7);
+          resolve({ dataUrl, name: file.name || '拓扑图照片', w, h });
+        }catch(err){ reject(err); }
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+async function aiAttachFiles(files){
+  const list = Array.from(files || []).filter(f => f && f.type && f.type.startsWith('image/'));
+  if (!list.length) { showToast('请选择图片文件', 'warn'); return; }
+  const room = AI_MAX_IMAGES - AI.attachments.length;
+  if (room <= 0) { showToast(`单次最多附加 ${AI_MAX_IMAGES} 张图片`, 'warn'); return; }
+  for (const file of list.slice(0, room)){
+    try{
+      const data = await aiImageFileToData(file);
+      AI.attachments.push(Object.assign(data, {
+        id: 'aiimg_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7)
+      }));
+    }catch(err){
+      showToast('图片读取失败：' + (err && err.message || err), 'error');
+    }
+  }
+  if (list.length > room) showToast(`单次最多附加 ${AI_MAX_IMAGES} 张图片`, 'warn');
+  aiRenderAttachments();
+}
+
+function aiRenderAttachments(){
+  const box = $('#aiAttachPreview');
+  if (!box) return;
+  box.classList.toggle('show', AI.attachments.length > 0);
+  box.innerHTML = AI.attachments.map((img, idx) =>
+    `<div class="ai-attach-item" title="${escHtml(img.name || '拓扑图照片')}">`
+    + `<img src="${img.dataUrl}" alt="">`
+    + `<button type="button" data-ai-remove="${idx}" title="移除">×</button></div>`
+  ).join('');
+  box.querySelectorAll('[data-ai-remove]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      AI.attachments.splice(Number(btn.dataset.aiRemove), 1);
+      aiRenderAttachments();
+    });
+  });
+}
+
+function aiClearAttachments(){
+  AI.attachments = [];
+  aiRenderAttachments();
+}
+
+function aiClipboardImageFiles(e){
+  const items = e.clipboardData && e.clipboardData.items;
+  if (!items) return [];
+  const files = [];
+  for (const item of items){
+    if (item.type && item.type.startsWith('image/')){
+      const file = item.getAsFile();
+      if (file) files.push(file);
+    }
+  }
+  return files;
+}
 
 /* ---- 设置管理 ---- */
 async function aiConfigRequest(path, body){
@@ -11386,7 +11496,7 @@ function aiSettingsDraft(){
 
 /* ---- 系统提示词 v0.92 ---- */
 function aiBuildSystemPrompt(){
-  let p = '你是网络拓扑图绘制助手。用户用自然语言描述网络结构，你输出严格 JSON，禁止输出 JSON 以外的任何内容。\n'
+  let p = '你是网络拓扑图绘制助手。用户用自然语言描述网络结构，你输出严格 JSON，禁止输出 JSON 以外的任何内容。' + '用户可能附加拓扑照片或截图；请先识别图中的设备类型、层级、数量、文字标注和连线关系，再转换为 JSON。看不清的内容不要编造，无法判断时在 message 中说明。\n'
     + '可用素材(kind)：router路由器 / switch交换机 / firewall防火墙 / server服务器 / db数据库 / software软件 / cloud云 / pc台式机 / laptop笔记本 / phone手机 / printer打印机 / globe互联网 / storage存储 / cluster集群 / rect矩形 / roundRect圆角矩形 / ellipse椭圆 / diamond菱形 / text文本 / image素材库图片\n';
   if (state.libFiles && state.libFiles.length){
     p += '用户素材库图片(kind=image，source 填下列文件名之一)：\n' + state.libFiles.slice(0,50).map(f=>'- '+f.name).join('\n') + '\n';
@@ -11896,7 +12006,7 @@ async function aiApplyGraph(dsl, refsOverride){
 }
 
 /* ---- 面板交互 ---- */
-function aiAppendMsg(role, content, extraCls){
+function aiAppendMsg(role, content, extraCls, images){
   const chat = $('#aiChat');
   const div = document.createElement('div');
   div.className = 'ai-msg msg-in ' + (role==='user' ? 'user' : 'bot') + (extraCls ? ' ' + extraCls : '');
@@ -11908,15 +12018,26 @@ function aiAppendMsg(role, content, extraCls){
   const body = document.createElement('div');
   body.textContent = content;
   div.appendChild(body);
+  if (images && images.length){
+    const gallery = document.createElement('div');
+    gallery.className = 'ai-msg-images';
+    images.forEach(img => {
+      const thumb = document.createElement('img');
+      thumb.src = img.dataUrl;
+      thumb.alt = img.name || '拓扑图照片';
+      gallery.appendChild(thumb);
+    });
+    div.appendChild(gallery);
+  }
   chat.appendChild(div);
   chat.scrollTop = chat.scrollHeight;
   return div;
 }
-function aiShowThinking(){
+function aiShowThinking(label){
   const chat = $('#aiChat');
   const div = document.createElement('div');
   div.className = 'ai-msg bot thinking'; div.id = 'aiThinking';
-  div.innerHTML = '正在理解你的描述<span class="ai-dot"></span><span class="ai-dot"></span><span class="ai-dot"></span>';
+  div.innerHTML = (label || '正在理解你的描述') + '<span class="ai-dot"></span><span class="ai-dot"></span><span class="ai-dot"></span>';
   chat.appendChild(div);
   chat.scrollTop = chat.scrollHeight;
 }
@@ -11926,25 +12047,37 @@ function aiRemoveThinking(){ const t = $('#aiThinking'); if (t) t.remove(); }
 async function aiSend(){
   const input = $('#aiInput');
   const text = input.value.trim();
-  if (!text || AI.busy) return;
+  const images = AI.attachments.slice();
+  const hasImages = images.length > 0;
+  if ((!text && !hasImages) || AI.busy) return;
   if (AI.pendingConfirm){ showToast('请先确认或撤销上一条 AI 生成结果', 'warn'); return; }
   AI.busy = true;
   $('#aiSend').disabled = true;
+  const instruction = text || '请识别附图中的拓扑结构，并绘制到画布。';
+  const displayText = text || '请识别附图中的拓扑结构，并绘制到画布。';
   input.value = '';
-  aiAppendMsg('user', text);
-  aiShowThinking();
-  
+  aiClearAttachments();
+  aiAppendMsg('user', displayText, '', images);
+  aiShowThinking(hasImages ? '正在识别图片并理解需求' : '');
+
   const summary = aiBuildCanvasSummary();
   AI.pendingRefs = summary.refs;
   const systemPrompt = aiBuildSystemPrompt();
   const canvasData = JSON.stringify({ shapes: summary.shapes, connectors: summary.connectors });
+  const canvasText = '画布现状(update 时引用 ref)：' + canvasData + '\n用户指令：' + instruction
+    + (hasImages ? '\n请先识别附图里的设备、层级、数量与连线关系，再输出 JSON。' : '');
+  const userContent = hasImages
+    ? [
+        { type: 'text', text: canvasText },
+        ...images.map(img => ({ type: 'image_url', image_url: { url: img.dataUrl } }))
+      ]
+    : canvasText;
   const messages = [
     { role: 'system', content: systemPrompt },
     ...AI.history.slice(-10).map(h => ({ role: h.role, content: h.content })),
-    { role: 'user', content: '画布现状(update 时引用 ref)：' + canvasData + '\n用户指令：' + text }
+    { role: 'user', content: userContent }
   ];
-  
-  
+
   const controller = new AbortController();
   const timer = setTimeout(()=>controller.abort(), 300000); // 5分钟超时
   
@@ -12046,7 +12179,7 @@ async function aiSend(){
       return;
     }
     
-    AI.history.push({ role:'user', content: text }, { role:'assistant', content: String(reply).slice(0, 600) });
+    AI.history.push({ role:'user', content: (text || '（已附拓扑图）') + (hasImages ? ' [附图]' : '') }, { role:'assistant', content: String(reply).slice(0, 600) });
     if (AI.history.length > 40) AI.history.splice(0, AI.history.length - 40);
     
     if (streamDiv) {
@@ -12113,6 +12246,10 @@ async function aiSend(){
       }
     }
     input.value = text;
+    if (images.length && !AI.attachments.length){
+      AI.attachments = images.slice();
+      aiRenderAttachments();
+    }
   }finally{
     AI.busy = false;
     $('#aiSend').disabled = false;
@@ -12137,6 +12274,18 @@ $('#tabProps').addEventListener('click', () => aiSwitchTab(false));
 $('#tabAI').addEventListener('click', () => aiSwitchTab(true));
 $('#btnAI').addEventListener('click', () => aiSwitchTab(true));
 $('#aiSend').addEventListener('click', aiSend);
+$('#aiPanel').addEventListener('paste', e => {
+  const files = aiClipboardImageFiles(e);
+  if (!files.length) return;
+  e.preventDefault();
+  e.stopPropagation();
+  aiAttachFiles(files);
+});
+$('#aiAttachBtn').addEventListener('click', () => $('#aiImageInput').click());
+$('#aiImageInput').addEventListener('change', e => {
+  aiAttachFiles(e.target.files);
+  e.target.value = '';
+});
 $('#aiInput').addEventListener('keydown', e => {
   // 中文输入法组合期间(选词确认)不触发发送
   if (e.isComposing || e.keyCode === 229) return;
@@ -12191,6 +12340,7 @@ $('#aiClearChat').addEventListener('click', () => {
   $('#aiChat').innerHTML = '';
   AI.history = [];
   AI.pendingRefs = null; AI.pendingConfirm = false;
+  aiClearAttachments();
   let cleaned = false;
   Object.keys(model.shapes).forEach(id => {
     if (model.shapes[id] && model.shapes[id]._temp){ delete model.shapes[id]; cleaned = true; }

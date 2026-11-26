@@ -53,6 +53,8 @@ from services import (
 # ---------------------------------------------------------------------------
 CONFIG_KEY = "ai_config"
 MAX_ROUNDS = 6
+TOPOLOGY_MAX_IMAGES = 2
+TOPOLOGY_MAX_IMAGE_CHARS = 6_000_000  # data URL length, roughly 4.5 MB binary
 
 DEFAULT_CONFIG = {
     "api_base": "",
@@ -360,6 +362,53 @@ def chat_completion(
     return data
 
 
+def _clean_topology_user_content(content):
+    """Accept plain text or OpenAI-style text + image_url content parts.
+
+    Image data URLs are forwarded to the configured model provider.  Keeping
+    this validation strict avoids forwarding arbitrary URLs or oversized
+    payloads through the local API.
+    """
+    if isinstance(content, str):
+        return content
+    if not isinstance(content, list) or not content:
+        raise ApiError("用户消息 content 必须是文本或多模态内容数组", 400, "invalid_messages")
+    parts = []
+    image_count = 0
+    for part in content:
+        if not isinstance(part, dict):
+            raise ApiError("多模态 content 的每一段都必须是对象", 400, "invalid_messages")
+        kind = part.get("type")
+        if kind == "text":
+            value = text(part.get("text"))
+            if value:
+                parts.append({"type": "text", "text": value})
+        elif kind == "image_url":
+            image = part.get("image_url")
+            url = text(image.get("url")) if isinstance(image, dict) else ""
+            if len(url) > TOPOLOGY_MAX_IMAGE_CHARS:
+                raise ApiError(
+                    f"单张图片过大（上限约 {TOPOLOGY_MAX_IMAGE_CHARS // 1_000_000} MB 编码后）",
+                    400,
+                    "image_too_large",
+                )
+            if not re.match(r"^data:image/(?:png|jpe?g|webp|gif);base64,", url, re.I):
+                raise ApiError("图片必须是 data:image/...;base64 格式", 400, "invalid_image")
+            image_count += 1
+            if image_count > TOPOLOGY_MAX_IMAGES:
+                raise ApiError(
+                    f"单次最多附带 {TOPOLOGY_MAX_IMAGES} 张图片",
+                    400,
+                    "too_many_images",
+                )
+            parts.append({"type": "image_url", "image_url": {"url": url}})
+        else:
+            raise ApiError(f"不支持的多模态内容类型：{text(kind) or 'unknown'}", 400, "invalid_messages")
+    if not parts:
+        raise ApiError("用户消息 content 不能为空", 400, "invalid_messages")
+    return parts
+
+
 def topology_completion(messages):
     """Stream drawing replies with the latest global configuration and no DB lock."""
     if not isinstance(messages, list) or not 1 <= len(messages) <= 42:
@@ -369,10 +418,14 @@ def topology_completion(messages):
         if (
             not isinstance(message, dict)
             or message.get("role") not in ("system", "user", "assistant")
-            or not isinstance(message.get("content"), str)
         ):
-            raise ApiError("消息必须包含有效的 role 与文本 content", 400, "invalid_messages")
-        clean_messages.append({"role": message["role"], "content": message["content"]})
+            raise ApiError("消息必须包含有效的 role 与 content", 400, "invalid_messages")
+        content = message.get("content")
+        if message["role"] == "user":
+            content = _clean_topology_user_content(content)
+        elif not isinstance(content, str):
+            raise ApiError("system / assistant 消息必须是文本 content", 400, "invalid_messages")
+        clean_messages.append({"role": message["role"], "content": content})
     migrate_legacy_ai_config()
     cfg = get_ai_config()
     # Release any transaction opened by legacy migration before contacting the model.

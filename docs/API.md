@@ -644,11 +644,23 @@ DELETE /api/tasks/<task_id>/subtasks/<subtask_id>
 }
 ```
 
-供拓扑编辑器使用。`messages` 必须是 1–42 条消息的数组，每条包含 `system/user/assistant` 之一的 `role` 和文本 `content`。每次请求读取最新全局 `api_base/model/api_key/temperature`，忽略客户端指定的模型或密钥；本地模型可不配置 Key。
+供拓扑编辑器使用。`messages` 必须是 1–42 条消息的数组，每条包含 `system/user/assistant` 之一的 `role`。`system/assistant` 的 `content` 必须为文本；`user` 的 `content` 可以是文本，也可以是 OpenAI 兼容的多模态数组：
 
-成功返回 `Content-Type: text/event-stream`，转发模型的 `data: {"choices":[{"delta":{"content":"..."}}]}` 事件和 `data: [DONE]`。模型需支持流式 Chat Completions 和 `response_format: {"type":"json_object"}`。绘图系统提示词与画布摘要由编辑器提供；全局助手的业务系统提示词不用于绘图。
+```json
+{
+  "role": "user",
+  "content": [
+    { "type": "text", "text": "画布现状…\n用户指令：照着这张图重画" },
+    { "type": "image_url", "image_url": { "url": "data:image/jpeg;base64,..." } }
+  ]
+}
+```
 
-请求参数错误返回 `400 invalid_messages`，未配置模型返回 `400 ai_not_configured`，上游连接失败或超时在流开始前返回 JSON 错误。流开始后的网络错误通过 `data: {"error":{"message":"..."}}` 提示；浏览器关闭连接时释放上游响应。
+图片仅接受 `data:image/png|jpeg|webp|gif;base64,...`，单次最多 2 张，单张编码后最多约 6 MB。每次请求读取最新全局 `api_base/model/api_key/temperature`，忽略客户端指定的模型或密钥；本地模型可不配置 Key。
+
+成功返回 `Content-Type: text/event-stream`，转发模型的 `data: {"choices":[{"delta":{"content":"..."}}]}` 事件和 `data: [DONE]`。模型需支持流式 Chat Completions、`response_format: {"type":"json_object"}`；使用图片时还需支持 OpenAI `image_url` 多模态内容。绘图系统提示词与画布摘要由编辑器提供；全局助手的业务系统提示词不用于绘图。
+
+请求参数错误返回 `400 invalid_messages`，不支持的图片 URL 返回 `400 invalid_image`，图片过大返回 `400 image_too_large`，超过 2 张返回 `400 too_many_images`；未配置模型返回 `400 ai_not_configured`，上游连接失败或超时在流开始前返回 JSON 错误。流开始后的网络错误通过 `data: {"error":{"message":"..."}}` 提示；浏览器关闭连接时释放上游响应。
 
 ### `POST /api/ai/actions/<id>/confirm`
 
