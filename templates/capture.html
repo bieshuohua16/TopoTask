@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TopoTash 速记</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/capture.css') }}">
+</head>
+<body class="capture-page">
+<div class="cap-desktop">
+  <div class="cap-widget">
+    <button class="cap-pill" id="pill" type="button" title="展开（Ctrl+Alt+N）">
+      <span class="cap-logo" aria-hidden="true">
+        <svg viewBox="0 0 32 32" fill="none">
+          <g transform="rotate(-4 16 16)" fill="none" stroke="currentColor" stroke-width="2.05" stroke-linecap="round">
+            <path d="M11.5 12.5L14.9 20.2"/>
+            <path d="M13 16.2C15.6 14.8 18.6 12.6 20.2 10.8"/>
+            <circle cx="10" cy="9.5" r="3.5"/>
+            <circle cx="16" cy="23.5" r="3.5"/>
+            <circle cx="23" cy="8.8" r="3.3"/>
+          </g>
+        </svg>
+      </span>
+      <span class="cap-pill-title">TopoTash 速记</span>
+      <span class="cap-pill-meta" id="pillMeta">今日 0 条</span>
+      <svg class="cap-pill-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="m6 15 6-6 6 6"/></svg>
+    </button>
+
+    <section class="cap-panel" id="panel">
+      <header class="cap-head">
+        <span class="cap-logo" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none">
+            <g transform="rotate(-4 16 16)" fill="none" stroke="currentColor" stroke-width="2.05" stroke-linecap="round">
+              <path d="M11.5 12.5L14.9 20.2"/>
+              <path d="M13 16.2C15.6 14.8 18.6 12.6 20.2 10.8"/>
+              <circle cx="10" cy="9.5" r="3.5"/>
+              <circle cx="16" cy="23.5" r="3.5"/>
+              <circle cx="23" cy="8.8" r="3.3"/>
+            </g>
+          </svg>
+        </span>
+        <div class="cap-title">TopoTash 速记</div>
+        <div class="cap-actions">
+          <button class="cap-newbtn" id="btnNew" type="button">＋ 新建</button>
+          <a class="cap-link" id="linkMain" href="/" target="_blank" rel="noopener" title="打开工作台">工作台</a>
+          <div class="cap-winbtns" id="winBtns" hidden>
+            <button class="cap-wbtn" id="btnMin" type="button" title="收起到标题栏">－</button>
+            <button class="cap-wbtn" id="btnSet" type="button" title="设置">⚙</button>
+            <button class="cap-wbtn" id="btnClose" type="button" title="收进托盘">×</button>
+          </div>
+        </div>
+      </header>
+
+      <div class="cap-proj" id="projRow">
+        <span class="cap-dot" id="projDot"></span>
+        <span class="cap-pname" id="projName">加载中…</span>
+        <span class="cap-stage" id="projStage"></span>
+      </div>
+
+      <div class="cap-editor">
+        <div class="cap-backdrop" id="backdrop"></div>
+        <textarea id="input" rows="1" spellcheck="false" placeholder="记一条待办…（+ 新建项目）"></textarea>
+      </div>
+
+      <div class="cap-hint" id="hint"><b>Enter</b> 记待办 · <b>@</b> 换项目 · <b>#</b> 售前阶段</div>
+
+      <div class="cap-suggest" id="suggest" hidden></div>
+
+      <div class="cap-tasks">
+        <div class="cap-sec-head">待办 <em id="taskCount"></em></div>
+        <div id="taskList"><div class="cap-empty">加载中…</div></div>
+      </div>
+
+      <footer class="cap-foot">
+        <span class="cap-hintfoot" id="footHint"><kbd>Enter</kbd> 记待办 · <kbd>@</kbd> 换项目 · <kbd>Ctrl</kbd>+<kbd>Z</kbd> 撤销</span>
+        <button class="cap-primary" id="btnSave" type="button">记待办</button>
+      </footer>
+
+      <div class="cap-settings" id="settings" hidden>
+        <div class="cs-row"><span>全局热键</span><span class="cs-keys"><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>N</kbd></span></div>
+        <div class="cs-row"><span>开机自启</span><label class="cs-switch"><input type="checkbox" id="autostart"><i></i></label></div>
+        <div class="cs-row cs-muted"><span>TopoTash 速记</span><em>v1.5</em></div>
+      </div>
+
+      <div class="cap-toast" id="toast" hidden>
+        <span class="cap-tick"><svg viewBox="0 0 24 24" fill="none"><path d="M20 6 9 17l-5-5"/></svg></span>
+        <span id="toastText">已记录</span>
+        <button class="cap-undo" id="toastUndo" type="button">撤销</button>
+      </div>
+    </section>
+  </div>
+</div>
+<script src="{{ url_for('static', filename='js/api.js') }}"></script>
+<script src="{{ url_for('static', filename='js/capture.js') }}"></script>
+</body>
+</html>

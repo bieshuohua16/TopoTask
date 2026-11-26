@@ -41,6 +41,8 @@ def create_app(test_config: dict | None = None) -> Flask:
         app.config.update(test_config)
     app.json.ensure_ascii = False
     app.json.sort_keys = False
+    # 本地单人应用：模板改动即时生效，省掉改页面就重启服务的来回
+    app.config["TEMPLATES_AUTO_RELOAD"] = True
     app.teardown_appcontext(close_db)
 
     # First run convenience: create the schema when the DB is absent/empty.
@@ -95,6 +97,11 @@ def create_app(test_config: dict | None = None) -> Flask:
             return redirect(url_for("dashboard"))
         project = project_dict(row, project_stats(project_id))
         return render_template("project.html", project=project)
+
+    @app.get("/capture")
+    def capture_page():
+        """桌面速记：一个输入框写进展/建项目（浮窗或浏览器独立标签）。"""
+        return render_template("capture.html")
 
     @app.get("/projects/<project_id>/diagrams/<diagram_id>")
     def diagram_editor(project_id, diagram_id):

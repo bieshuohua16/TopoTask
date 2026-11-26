@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>12 Tab 时延预算</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    width: 1280px; height: 660px;
+    font-family: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    background: #f4f5f9; color: #101828;
+    padding: 40px;
+  }
+  .sheet {
+    position: relative; height: 580px; background: #fff;
+    border: 1px solid #e8eaf2; border-radius: 18px;
+    box-shadow: 0 12px 32px -18px rgba(16, 24, 40, 0.18);
+    padding: 30px 36px;
+  }
+  h1 { font-size: 21px; letter-spacing: -0.01em; }
+  .sub { margin-top: 6px; font-size: 12.5px; color: #667085; line-height: 1.6; }
+  .legend { position: absolute; top: 34px; right: 36px; display: flex; gap: 14px; font-size: 11px; color: #667085; }
+  .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 0; }
+
+  .scene { margin-top: 20px; }
+  .s-title { display: flex; align-items: center; gap: 8px; font-size: 12.5px; font-weight: 600; color: #344054; }
+  .s-title b {
+    width: 18px; height: 18px; border-radius: 5px; background: #eef0ff; color: #4f46e5;
+    display: grid; place-items: center; font-size: 10.5px;
+  }
+  .s-title span { font-weight: 400; color: #98a2b3; }
+
+  .rail-wrap { position: relative; height: 160px; margin-top: 6px; }
+  .rail { position: absolute; left: 0; right: 0; top: 92px; height: 1.5px; background: #e6e9f2; }
+  .rail::before, .rail::after { content: ""; position: absolute; top: -3px; width: 1.5px; height: 8px; background: #dfe3ee; }
+
+  .ev { position: absolute; width: 178px; margin-left: -89px; text-align: center; }
+  .ev.up { top: 0; height: 92px; display: flex; flex-direction: column; justify-content: flex-end; padding-bottom: 14px; }
+  .ev.down { top: 92px; padding-top: 15px; display: flex; flex-direction: column; align-items: center; }
+  .ev .t { font-size: 10.5px; font-weight: 700; color: #344054; font-variant-numeric: tabular-nums; }
+  .ev .d { font-size: 11.5px; color: #667085; line-height: 1.45; margin-top: 3px; }
+  .dot {
+    position: absolute; left: 50%; margin-left: -5.5px;
+    width: 11px; height: 11px; border-radius: 50%;
+    border: 2.5px solid #fff;
+    box-shadow: 0 0 0 1px rgba(16, 24, 40, 0.08), 0 2px 4px rgba(16, 24, 40, 0.12);
+  }
+  .ev.up .dot { bottom: -5.5px; }
+  .ev.down .dot { top: -5.5px; }
+  .c-user { background: #4f46e5; }
+  .c-local { background: #12b76a; }
+  .c-ai { background: #f79009; }
+  .c-bg { background: #98a2b3; }
+
+  .budget {
+    position: absolute; right: 0; top: 0;
+    font-size: 10.5px; font-weight: 600; color: #067647;
+    background: #dcfae6; border-radius: 5px; padding: 2px 7px;
+  }
+
+  .scale { position: relative; height: 22px; margin-top: -8px; }
+  .scale span { position: absolute; top: 0; transform: translateX(-50%); font-size: 10px; color: #b0b8c6; font-variant-numeric: tabular-nums; }
+
+  .foot {
+    position: absolute; left: 36px; right: 36px; bottom: 26px;
+    display: flex; gap: 22px; font-size: 11px; color: #667085;
+    border-top: 1px solid #f0f2f8; padding-top: 12px;
+  }
+  .foot b { color: #344054; font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="sheet">
+  <h1>Tab 补全的时延预算</h1>
+  <p class="sub">目标：Tab 的视觉反馈 ≤ 16ms（一帧）。AI 只在“你还在打字”时提前算，或在你已经拿到结果后补充。</p>
+  <div class="legend">
+    <span><i class="c-user"></i>用户动作</span>
+    <span><i class="c-local"></i>本地 / 瞬时</span>
+    <span><i class="c-ai"></i>AI 返回</span>
+  </div>
+
+  <div class="scene">
+    <div class="s-title"><b>A</b>预取已返回 <span>· 多数情况，≈80%</span></div>
+    <div class="rail-wrap">
+      <div class="rail"></div>
+      <span class="budget" style="top:2px">Tab → 屏幕 ≤ 5ms</span>
+
+      <div class="ev up" style="left:70px">
+        <span class="t">0ms</span><span class="d">敲下「+ 恒达」</span>
+        <i class="dot c-user"></i>
+      </div>
+      <div class="ev down" style="left:96px">
+        <span class="t">40ms</span><span class="d">本地补全就绪（历史项目名）</span>
+        <i class="dot c-local"></i>
+      </div>
+      <div class="ev up" style="left:268px">
+        <span class="t">300ms</span><span class="d">停手 250ms，静默预取</span>
+        <i class="dot c-bg"></i>
+      </div>
+      <div class="ev down" style="left:585px">
+        <span class="t">780ms</span><span class="d">AI 结果已回，留在内存</span>
+        <i class="dot c-ai"></i>
+      </div>
+      <div class="ev up" style="left:697px">
+        <span class="t">950ms · Tab</span><span class="d">本地 + AI 一起出，一次到位</span>
+        <i class="dot c-local"></i>
+      </div>
+    </div>
+  </div>
+
+  <div class="scene" style="margin-top:2px">
+    <div class="s-title"><b>B</b>预取未返回 <span>· 手速快 / 网络慢，≈20%</span></div>
+    <div class="rail-wrap">
+      <div class="rail"></div>
+      <span class="budget" style="top:2px;color:#b54708;background:#fef0c7">Tab → 屏幕 ≤ 5ms</span>
+
+      <div class="ev up" style="left:70px">
+        <span class="t">0ms</span><span class="d">敲下「+ 恒达」</span>
+        <i class="dot c-user"></i>
+      </div>
+      <div class="ev down" style="left:268px">
+        <span class="t">300ms · Tab</span><span class="d">本地立即补全，不转圈、不等待</span>
+        <i class="dot c-local"></i>
+      </div>
+      <div class="ev up" style="left:796px">
+        <span class="t">1100ms</span><span class="d">AI 结果到达，不覆盖已补的字</span>
+        <i class="dot c-ai"></i>
+      </div>
+      <div class="ev down" style="left:994px">
+        <span class="t">1400ms</span><span class="d">变成「补充建议」，再按 Tab 采纳</span>
+        <i class="dot c-bg"></i>
+      </div>
+    </div>
+  </div>
+
+  <div class="scale" style="margin-top:6px">
+    <span style="left:70px">0</span>
+    <span style="left:334px">400ms</span>
+    <span style="left:598px">800ms</span>
+    <span style="left:862px">1200ms</span>
+    <span style="left:1126px">1600ms</span>
+  </div>
+
+  <div class="foot">
+    <span><b>预取</b> 停顿 250ms 才发，输入一变立刻取消（AbortController）</span>
+    <span><b>超时</b> 2s 丢弃，不提示、不阻塞</span>
+    <span><b>缓存</b> 同一前缀 + 项目 命中后永久 0ms</span>
+  </div>
+</div>
+</body>
+</html>

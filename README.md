@@ -9,8 +9,9 @@ TopoTash 是一个自带后端的完整 Web 应用。每个项目下有多个任
 - 项目设备清单：方案级 BOM、类别/状态/数量/价格、CSV 导出，设备↔拓扑节点双向关联
 - 全局设备模板库：手动录入或 CSV 导入常用设备，设备弹窗/拓扑节点可直接套用模板后再按项目修改
 - 全局 AI 助手：一处配置 OpenAI 兼容 API，对话式新建项目、补充任务；补任务会先追问目标再生成可编辑草稿，所有写入确认后才执行
-- 拓扑编辑器：系统架构图、逻辑拓扑、POC 部署图，节点级任务/设备联动；节点为 180×60 宽卡片，直接显示绑定的设备名称与「型号 × 数量」；支持 JSON / PNG / SVG / reveal.js 片段导出，画布自动保存到 TopoTash
+- 拓扑编辑器：系统架构图、逻辑拓扑、POC 部署图，节点级任务/设备联动；节点为 180×60 宽卡片，直接显示绑定的设备名称与「型号 × 数量」；支持粘贴拓扑照片/截图，由多模态模型识别后生成预览；支持 JSON / PNG / SVG / reveal.js 片段导出，画布自动保存到 TopoTash
 - 靛蓝品牌视觉：深蓝导航侧栏 + 浅灰工作区，顶栏固定全局搜索、AI 助手与新建项目；品牌标、favicon 与桌面快捷方式统一为蓝底圆环节点网络；拓扑画布复用同一套设计 token
+- 桌面速记浮窗：一行输入**记待办 / 建项目**（`#` 售前阶段、`@` 项目），标题栏「工作台」一键回主站
 - SQLite 持久化，数据全部落在项目根目录，离线可用
 
 ![项目总览](docs/screenshots/01-dashboard.png)
@@ -49,6 +50,10 @@ TopoTash 是一个自带后端的完整 Web 应用。每个项目下有多个任
 |---|---|
 | ![拓扑节点设备联动](docs/screenshots/15-topology-device-panel.png) | ![AI 助手](docs/screenshots/21-ai-assistant.png) |
 
+| 桌面速记浮窗（无边框 / 置顶 / 托盘） | 收起态（点一下展开） |
+|---|---|
+| ![桌面速记浮窗](docs/screenshots/22-capture-floating.png) | ![收起态](docs/screenshots/23-capture-collapsed.png) |
+
 ## 快速开始
 
 环境：Python 3.10+（当前测试环境为 3.12），浏览器用 Chrome / Edge。
@@ -80,7 +85,30 @@ python start_topotash.py                # 启动并打开浏览器（127.0.0.1:5
 python start_topotash.py --port 5050    # 换端口
 python start_topotash.py --debug        # Flask 调试模式
 python start_topotash.py --db D:\data\tt.db  # 指定数据库
+python start_topotash.py --floating    # 服务 + 桌面速记浮窗（需 pywebview）
 ```
+
+### 桌面速记浮窗（可选）
+
+无边框、始终置顶的小窗，用来**随手记待办**或新建项目；记录直接进项目任务台，不另开一套数据。
+完整说明（交互、接口、排错、测试）见 **[docs/CAPTURE.md](docs/CAPTURE.md)**。
+
+```bash
+python -m pip install -r requirements-floating.txt   # 只需装一次（pywebview）
+python start_topotash.py --floating                  # 服务 + 浮窗，不自动开浏览器
+```
+
+- 标题栏与主站同一套品牌：`TopoTash 速记` + 节点网络标；右上角 `＋ 新建`、**`工作台`**、`－ ⚙ ×`
+- **`－` 收起成悬浮标题栏**（仍置顶），点标题栏展开；**不是最小化到任务栏**
+- 面板里是当前项目的**待办**（未完成前 6 条，优先级圆点 + 截止日），`@` 换项目后立刻刷新
+- 输入 `#` 选**售前阶段**（需求调研 / 方案编写 / POC 验证 / 招投标），Enter 建任务
+- **Enter** 提交，或确认 `@` / `#` 选择器（`↑↓` 移动）；**Tab 已取消**，避免和中文输入法打架
+- 标题栏右侧：`－` 收起、`⚙` 设置（开机自启）、`×` **收进托盘**（不退出，退出走托盘菜单）
+- **不进任务栏**：窗口是 `WS_EX_TOOLWINDOW`，只在右下角托盘；托盘左键显示/隐藏，右键菜单「展开 / 收起 · 打开工作台 · 退出」
+- 窗口位置记在 `%LOCALAPPDATA%\TopoTash\window.json`，日志在 `app.log`
+- 收起态只保留标题栏；展开时最小 380×520，标题栏按钮不会被裁
+- 已有实例时重复启动只会唤起，不会开第二个
+- 不想装 pywebview 也能用：浏览器直接打开 `http://127.0.0.1:5000/capture`
 
 > 快捷方式记录当前 Python 解释器、项目和数据库的绝对路径。更换 Python、移动项目目录后，重新运行首次启动向导即可更新；自定义数据库请继续传入 `--db`。若端口上的实例使用其他数据库，启动器会提示换端口。
 
@@ -161,6 +189,9 @@ TopoTash 由一个 Flask 应用统一托管：
 TopoTash/
 ├── app.py                      # Flask 入口、页面路由、CLI（init-db / seed-demo）
 ├── start_topotash.py           # 桌面快捷方式调用的启动器（自动开浏览器、防重复启动）
+├── quick_capture.py            # 桌面速记浮窗（pywebview 壳 + 全局热键 + 单实例 + 托盘）
+├── tray_icon.py                # 托盘图标与任务栏隐藏（纯 ctypes）
+├── requirements-floating.txt  # 浮窗依赖（pywebview），不装也能用浏览器版
 ├── setup_first_run.py          # 首次启动向导：环境检查 / 建库 / 示例数据 / 快捷方式
 ├── 首次启动.bat                # Windows 双击入口（找到 Python 后运行上面的向导）
 ├── db.py                       # SQLite 连接、事务、通用工具
@@ -176,7 +207,8 @@ TopoTash/
 │   ├── diagrams.py             # 图纸内容、节点索引、节点跟进/关联
 │   ├── devices.py              # 设备 CRUD、节点关联、CSV、全局设备模板
 │   ├── views.py                # 总览、阶段看板、关联视图、全局搜索
-│   └── ai.py                   # AI 配置、会话、对话、草稿确认
+│   ├── ai.py                   # AI 配置、会话、对话、草稿确认
+│   └── capture.py              # 速记浮窗的窗口控制、托盘状态、开机自启
 ├── templates/                  # Jinja 页面骨架
 │   ├── base.html
 │   ├── dashboard.html
@@ -210,18 +242,26 @@ TopoTash/
 │   ├── test_ai_topology.py     # 拓扑绘图全局配置、流式代理与密钥隔离
 │   ├── test_devices.py         # 设备 CRUD、筛选汇总、节点关联、CSV、级联清理
 │   ├── test_device_templates.py # 模板 CRUD、重复校验、CSV 预览/导入、页面路由
-│   └── test_regressions.py     # 草稿冲突、数据保留、并发、查询与启动回归
+│   ├── test_regressions.py     # 草稿冲突、数据保留、并发、查询与启动回归
+│   ├── test_capture_page.py    # 速记页面、浮窗端点、「速记=建任务」契约
+│   ├── test_capture_shell.py   # 收起/展开/移动的几何计算（mock）
+│   ├── test_capture_window.py  # 真实窗口上的收起/展开（屏幕外 Tk 窗口）
+│   ├── test_tray.py            # 任务栏隐藏（WS_EX_TOOLWINDOW）
+│   └── test_workbench.py       # 托盘「打开工作台」的 URL 与浏览器调用
 ├── tools/
 │   ├── seed_demo.py            # 示例数据
 │   ├── data/gpu_cluster_topology.vweb.json  # 真实画布存档（示例数据里的 GPU 集群拓扑）
 │   ├── migrate_json.py         # 历史 JSON 数据导入
 │   └── make_icon.py            # 生成 static/topotash.ico（纯标准库，无需 Pillow）
 ├── docs/
+│   ├── README.md               # 文档索引
+│   ├── CAPTURE.md              # 桌面速记浮窗：交互、接口、窗口/托盘行为、排错
+│   ├── feasibility-capture.md  # 速记的可行性评估、落地记录与踩坑
 │   ├── DESIGN.md               # 数据模型、Schema、API、前端架构
 │   ├── DESIGN-TEAM.md          # 多用户 / 团队 / 权限设计 + 宝塔部署方案（v1.1）
 │   ├── API.md                  # REST API 明细
 │   ├── ui-prototype.html       # 四套主题、七个页面的静态 UI 原型
-│   ├── prototypes/             # 设备清单 / 拓扑联动的历史静态原型
+│   ├── prototypes/             # 速记设计原型（图 + demo + archive/ 历史单页）
 │   └── screenshots/            # README 与设计文档使用的当前界面截图
 ├── licenses/
 │   └── THIRD_PARTY_NOTICES.md  # 第三方组件与许可
@@ -313,6 +353,11 @@ POST   /api/ai/chat                           发送消息（服务端代理模�
 POST   /api/ai/topology                       拓扑绘图流式生成（使用全局 AI 配置）
 POST   /api/ai/actions/<id>/confirm           确认执行草稿
 POST   /api/ai/actions/<id>/cancel            取消草稿
+
+POST   /api/capture/window                    浮窗窗口动作（收起/展开/移动/关闭）
+GET    /api/capture/state                     浮窗状态（是否收起 + 窗口坐标）
+GET    /api/capture/autostart                 开机自启状态
+PUT    /api/capture/autostart                 开关开机自启
 ```
 
 ## 设计说明
@@ -332,7 +377,7 @@ POST   /api/ai/actions/<id>/cancel            取消草稿
 - 全局 AI 两阶段写入：读工具直接查询；`create/update/delete` 工具只生成 `ai_actions` 草稿，用户在抽屉里改字段并点确认后才调用 `services.py` 落库，失败不会留下半成品。
 - 修改草稿只写入实际改动的字段；同一字段在草稿生成后被修改时会提示冲突，需要重新生成草稿。升级前生成、缺少字段快照的修改草稿也需要重新生成。
 - AI 配置只存一份：`app_settings.ai_config`，首次打开会自动迁移最近一个项目的旧 `aiConfig`；模型请求由 Flask 转发，Key 不回传浏览器。
-- 拓扑编辑器与全局助手共用上述配置；编辑器中的「全局 AI 设置」也保存到同一处，API Key 留空保留已存密钥。绘图使用流式转发，每次调用读取最新配置，不再读取浏览器中的独立 LLM 配置。
+- 拓扑编辑器与全局助手共用上述配置；编辑器中的「全局 AI 设置」也保存到同一处，API Key 留空保留已存密钥。绘图使用流式转发，每次调用读取最新配置，不再读取浏览器中的独立 LLM 配置。绘图输入支持直接粘贴拓扑照片/截图；图片以 OpenAI 兼容的 `image_url` data URL 随消息发送，要求所配置的模型/网关支持多模态图片输入。
 - AI 会话和草稿持久化在 `ai_conversations/ai_messages/ai_actions`，刷新页面或切换项目仍可继续。
 
 ## 已知限制

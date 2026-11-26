@@ -101,7 +101,7 @@ def _project_count(flask_app) -> int | None:
 
 def _fail(message: str) -> int:
     print(f"\n[错误] {message}", flush=True)
-    if sys.stdin and sys.stdin.isatty():
+    if sys.stdin is not None and sys.stdin.isatty():
         try:
             input("\n按回车键退出 ...")
         except (EOFError, KeyboardInterrupt):
@@ -124,7 +124,19 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--db", help="数据库文件路径")
     parser.add_argument("--debug", action="store_true", help="启用 Flask 调试模式")
     parser.add_argument("--no-browser", action="store_true", help="不自动打开浏览器")
+    parser.add_argument(
+        "--floating",
+        action="store_true",
+        help="启动桌面速记浮窗（需要 pywebview；自动不打开浏览器）",
+    )
     args = parser.parse_args(argv)
+    if args.floating:
+        try:
+            from quick_capture import redirect_streams
+
+            redirect_streams()
+        except Exception:
+            pass
     if args.db:
         os.environ["TOPOTASH_DB"] = str(Path(args.db).expanduser().resolve())
 
@@ -203,12 +215,22 @@ def main(argv: list[str] | None = None) -> int:
     print("\n       正在启动本地服务 ...", flush=True)
     print("       关闭窗口或按 Ctrl+C 即可停止。\n", flush=True)
 
-    if not args.no_browser:
+    if not args.no_browser and not args.floating:
         threading.Thread(
             target=_open_browser_when_ready,
             args=(port, url),
             daemon=True,
         ).start()
+
+    if args.floating:
+        from quick_capture import run as run_capture
+
+        return run_capture(
+            flask_app,
+            port=port,
+            db_path=os.environ.get("TOPOTASH_DB"),
+            debug=debug,
+        )
 
     try:
         flask_app.run(

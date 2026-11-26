@@ -9,6 +9,7 @@ def register_blueprints(app):
     from .views import bp as views_bp
     from .devices import bp as devices_bp
     from .ai import bp as ai_bp
+    from .capture import bp as capture_bp
 
     app.register_blueprint(projects_bp)
     app.register_blueprint(tasks_bp)
@@ -16,3 +17,4 @@ def register_blueprints(app):
     app.register_blueprint(views_bp)
     app.register_blueprint(devices_bp)
     app.register_blueprint(ai_bp)
+    app.register_blueprint(capture_bp)
